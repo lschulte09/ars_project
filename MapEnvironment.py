@@ -20,7 +20,7 @@ class MapEnvironment:
         pygame.display.set_caption("Robot Simulation")
         self.generate_obstacles(num_obstacles)
         self.generate_dust(num_dust)
-        self.font = pygame.font.SysFont(None, 24)
+        self.font = pygame.font.SysFont('arial', 24)
         
         # Control params
         self.v_left = 0.0
@@ -44,7 +44,9 @@ class MapEnvironment:
             self.dust_particles.append(DustParticle(x, y))
 
     def place_robot(self):
-        # place in the middle with random theta
+        rand_x_robot = random.uniform(0, self.width)
+        rand_y_robot = random.uniform(0, self.height)
+        # we check for not colliding with all the stuff
         self.robot = Robot(self.width/2, self.height/2, random.uniform(0, 2 * math.pi))
         # Initial sensor update
         self.robot.update_sensors(self.obstacles)
