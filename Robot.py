@@ -22,9 +22,28 @@ class Robot:
 
         pygame.draw.circle(screen, (255, 0, 0), (self.x, self.y), self.radius, 0)
 
-        line_x = self.x + self.radius * math.cos(self.x)
-        line_y = self.y+self.radius*math.sin(self.y)
+        line_x = self.x + self.radius * math.cos(self.theta)
+        line_y = self.y + self.radius * math.sin(self.theta)
         pygame.draw.line(screen, (0, 0, 0), (self.x, self.y), (line_x, line_y), 3)
+
+        left_angle = self.theta + math.pi / 2
+        right_angle = self.theta - math.pi / 2
+
+        text_dist = self.radius/2
+
+        left_x = self.x + text_dist * math.cos(left_angle)
+        left_y = self.y - text_dist * math.sin(left_angle)
+
+        right_x = self.x + text_dist * math.cos(right_angle)
+        right_y = self.y - text_dist * math.sin(right_angle)
+
+        font = pygame.font.SysFont('Arial', 12)
+        v_left_text = font.render(f"{self.v_left:.2f}", True, (0, 0, 0))
+        v_right_text = font.render(f"{self.v_right:.2f}", True, (0, 0, 0))
+
+        screen.blit(v_left_text, (left_x - v_left_text.get_width() / 2, left_y - v_left_text.get_height() / 2))
+        screen.blit(v_right_text, (right_x - v_right_text.get_width() / 2, right_y - v_right_text.get_height() / 2))
+
         # draw sensors with numbers
 
 
