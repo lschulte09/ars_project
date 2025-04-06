@@ -10,6 +10,7 @@ class Robot:
         self.y = y  # position y-coordinate
         self.v_left = 0
         self.v_right = 0
+        self.v = (self.v_right+self.v_left)/2
         self.theta = theta  # orientation in radians
         self.radius = 30
 
