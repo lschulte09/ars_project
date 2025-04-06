@@ -11,6 +11,7 @@ class Robot:
         self.v_right = 0.0  # right wheel velocity
         self.wheel_radius = 5.0  # wheel radius
         self.wheel_distance = 40.0  # distance between wheels
+        self.v = (self.v_right+self.v_left)/2
         self.theta = theta  # orientation in radians
         self.radius = 30  # robot radius
         
