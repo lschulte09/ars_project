@@ -7,11 +7,11 @@ from Robot import Robot
 
 class MapEnvironment:
     def __init__(self, width, height, num_obstacles=5, num_dust=10):
+        self.robot = None
         self.width = width
         self.height = height
         self.obstacles = []
         self.dust_particles = []
-        self.robot = None
 
         self.generate_obstacles(num_obstacles)
         self.generate_dust(num_dust)

@@ -1,3 +1,5 @@
+import pygame
+
 from Obstacle import YELLOW
 
 
