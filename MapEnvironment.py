@@ -10,17 +10,19 @@ from Robot import Robot
 
 
 class MapEnvironment:
-    def __init__(self, width, height, num_obstacles=5, num_dust=10):
+    def __init__(self, width, height, num_obstacles=5, num_dust=0, num_landmarks = 0):
         self.width = width
         self.height = height
         self.obstacles = []
         self.dust_particles = []
+        self.landmarks = []
         self.robot = None
         self.screen = pygame.display.set_mode((self.width, self.height))
         pygame.display.set_caption("Robot Simulation")
         self.generate_obstacles(num_obstacles)
         self.generate_dust(num_dust)
-        self.font = pygame.font.SysFont('arial', 24)
+        self.num_landmarks = num_landmarks
+        self.font = pygame.font.SysFont(None, 24)
         
         # Control params
         self.v_left = 0.0
@@ -36,6 +38,11 @@ class MapEnvironment:
             x = random.uniform(0, self.width - obs_width)
             y = random.uniform(0, self.height - obs_height)
             self.obstacles.append(Obstacle(x, y, obs_width, obs_height))
+
+    def generate_landmarks(self):
+        for _ in range(self.num_landmarks):
+            x = random.uniform(0, self.width - self.width / 2)
+            y = random.uniform(0, self.height - self.height / 2)
 
     def generate_dust(self, num):
         for _ in range(num):

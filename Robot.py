@@ -98,6 +98,7 @@ class Robot:
         self.theta = self.theta % (2 * math.pi)
         
         # Check for collisions if obstacles are provided
+        # need to implement sliding, use vector2 maybe
         if obstacles:
             if self.check_collision(obstacles):
                 # Collision detected, revert to last valid position
