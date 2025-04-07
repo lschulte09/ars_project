@@ -14,9 +14,9 @@ def main():
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
-        
-        # Handle keyboard input
-        env.handle_input()
+            if event.type == pygame.KEYDOWN:
+                # Handle keyboard input
+                env.handle_input(event)
         
         # Update the environment
         env.update()

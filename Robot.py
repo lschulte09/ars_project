@@ -9,11 +9,12 @@ class Robot:
         self.y = y  # position y-coordinate
         self.v_left = 0.0  # left wheel velocity
         self.v_right = 0.0  # right wheel velocity
+        self.radius = 30  # robot radius
         self.wheel_radius = 5.0  # wheel radius
-        self.wheel_distance = 40.0  # distance between wheels
+        self.wheel_distance = self.radius*2  # distance between wheels
         self.v = (self.v_right+self.v_left)/2
         self.theta = theta  # orientation in radians
-        self.radius = 30  # robot radius
+        self.max_speed = 20
         
         # Create 12 sensors placed every 30 degrees (360°/12)
         self.sensors = [Sensor(np.deg2rad(angle), 200) for angle in range(0, 360, 30)]
@@ -135,5 +136,5 @@ class Robot:
                 
                 # Render the sensor number
                 font = pygame.font.SysFont(None, 20)
-                text = font.render(str(i), True, (0, 0, 255))
+                text = font.render(str(int(sensor.current_distance)), True, (0, 0, 255))
                 screen.blit(text, (int(text_x), int(text_y)))

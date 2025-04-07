@@ -20,7 +20,7 @@ class MapEnvironment:
         pygame.display.set_caption("Robot Simulation")
         self.generate_obstacles(num_obstacles)
         self.generate_dust(num_dust)
-        self.font = pygame.font.SysFont(None, 24)
+        self.font = pygame.font.SysFont('arial', 24)
         
         # Control params
         self.v_left = 0.0
@@ -44,47 +44,72 @@ class MapEnvironment:
             self.dust_particles.append(DustParticle(x, y))
 
     def place_robot(self):
-        # place in the middle with random theta
+        rand_x_robot = random.uniform(0, self.width)
+        rand_y_robot = random.uniform(0, self.height)
+        # we check for not colliding with all the stuff
         self.robot = Robot(self.width/2, self.height/2, random.uniform(0, 2 * math.pi))
         # Initial sensor update
         self.robot.update_sensors(self.obstacles)
 
-    def handle_input(self):
+    def handle_input(self, event):
         """
         Handle keyboard input for controlling the robot.
         """
-        keys = pygame.key.get_pressed()
-        
-        # Control left wheel velocity
-        if keys[pygame.K_q]:  # Increase left wheel velocity
-            self.v_left += self.step_size
-        if keys[pygame.K_a]:  # Decrease left wheel velocity
-            self.v_left -= self.step_size
-            
-        # Control right wheel velocity
-        if keys[pygame.K_e]:  # Increase right wheel velocity
-            self.v_right += self.step_size
-        if keys[pygame.K_d]:  # Decrease right wheel velocity
-            self.v_right -= self.step_size
-            
-        # Set both wheels to the same velocity (forward)
-        if keys[pygame.K_w]:
-            self.v_left += self.step_size
-            self.v_right += self.step_size
-            
-        # Set both wheels to the same velocity (backward)
-        if keys[pygame.K_s]:
-            self.v_left -= self.step_size
-            self.v_right -= self.step_size
-            
-        # Stop the robot
-        if keys[pygame.K_SPACE]:
+
+        if event.key == pygame.K_SPACE:
             self.v_left = 0.0
             self.v_right = 0.0
+
+        if event.key == pygame.K_q:  # Increase left wheel velocity
+            self.v_left += self.step_size
+        if event.key == pygame.K_a:  # Decrease left wheel velocity
+            self.v_left -= self.step_size
+
+        if event.key == pygame.K_e:  # Increase right wheel velocity
+            self.v_right += self.step_size
+        if event.key == pygame.K_d:  # Decrease right wheel velocity
+            self.v_right -= self.step_size
+
+        if event.key == pygame.K_w:
+            self.v_left += self.step_size
+            self.v_right += self.step_size
+
+        if event.key == pygame.K_s:
+            self.v_left -= self.step_size
+            self.v_right -= self.step_size
+
+        # keys = pygame.key.get_pressed()
+        #
+        # # Control left wheel velocity
+        # if keys[pygame.K_q]:  # Increase left wheel velocity
+        #     self.v_left += self.step_size
+        # if keys[pygame.K_a]:  # Decrease left wheel velocity
+        #     self.v_left -= self.step_size
+        #
+        # # Control right wheel velocity
+        # if keys[pygame.K_e]:  # Increase right wheel velocity
+        #     self.v_right += self.step_size
+        # if keys[pygame.K_d]:  # Decrease right wheel velocity
+        #     self.v_right -= self.step_size
+        #
+        # # Set both wheels to the same velocity (forward)
+        # if keys[pygame.K_w]:
+        #     self.v_left += self.step_size
+        #     self.v_right += self.step_size
+        #
+        # # Set both wheels to the same velocity (backward)
+        # if keys[pygame.K_s]:
+        #     self.v_left -= self.step_size
+        #     self.v_right -= self.step_size
+        #
+        # # Stop the robot
+        # if keys[pygame.K_SPACE]:
+        #     self.v_left = 0.0
+        #     self.v_right = 0.0
             
         # Apply velocity limits
-        self.v_left = max(-10.0, min(10.0, self.v_left))
-        self.v_right = max(-10.0, min(10.0, self.v_right))
+        self.v_left = max(-self.robot.max_speed, min(self.robot.max_speed, self.v_left))
+        self.v_right = max(-self.robot.max_speed, min(self.robot.max_speed, self.v_right))
         
         # Update robot wheel velocities
         self.robot.set_wheel_velocities(self.v_left, self.v_right)
