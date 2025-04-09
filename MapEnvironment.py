@@ -142,7 +142,7 @@ class MapEnvironment:
         """
         if self.robot:
             # Move the robot
-            self.robot.move(dt=0.1, obstacles=self.obstacles_boundary)
+            self.robot.move(dt=0.1, obstacles=self.obstacles_boundary, landmarks = self.landmarks)
             # Update sensor readings
             self.robot.update_sensors(self.obstacles_boundary)
 
