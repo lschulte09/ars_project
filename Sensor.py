@@ -16,7 +16,7 @@ class Sensor:
         sensor_angle = robot.theta + self.relative_angle
         
         # Starting point (robot's position)
-        start_x, start_y = robot.x, robot.y
+        start_x, start_y = robot.pos.x, robot.pos.y
         
         # Initialize with max range
         min_distance = self.max_range
@@ -83,8 +83,8 @@ class Sensor:
         Calculate the end point of the sensor ray based on current reading.
         """
         sensor_angle = robot.theta + self.relative_angle
-        end_x = robot.x + self.current_distance * math.cos(sensor_angle)
-        end_y = robot.y + self.current_distance * math.sin(sensor_angle)
+        end_x = robot.pos.x + self.current_distance * math.cos(sensor_angle)
+        end_y = robot.pos.y + self.current_distance * math.sin(sensor_angle)
         return (end_x, end_y)
     
     def draw(self, screen, robot, color=(0, 255, 0)):
@@ -92,7 +92,7 @@ class Sensor:
         Draw the sensor ray on the screen.
         """
         sensor_angle = robot.theta + self.relative_angle
-        start_x, start_y = robot.x, robot.y
+        start_x, start_y = robot.pos.x, robot.pos.y
         end_x = start_x + self.current_distance * math.cos(sensor_angle)
         end_y = start_y + self.current_distance * math.sin(sensor_angle)
         

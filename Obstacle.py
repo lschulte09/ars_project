@@ -1,4 +1,5 @@
 import pygame
+from pygame.math import Vector2
 import random
 import math
 
@@ -20,3 +21,6 @@ class Obstacle:
 
     def draw(self, screen):
         pygame.draw.rect(screen, GRAY, pygame.Rect(self.x, self.y, self.width, self.height))
+
+    def get_points(self):
+        return [Vector2(self.x, self.y), Vector2(self.x + self.width, self.y), Vector2(self.x + self.width, self.y + self.height), Vector2(self.x, self.y + self.height)]

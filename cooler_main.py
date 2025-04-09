@@ -5,7 +5,7 @@ from MapEnvironment import MapEnvironment
 def main():
     pygame.init()
     clock = pygame.time.Clock()
-    env = MapEnvironment(1280, 720, num_obstacles=8, num_dust=15)
+    env = MapEnvironment(1280, 720, num_obstacles=8, num_dust=15, num_landmarks=5)
     running = True
 
     env.place_robot()

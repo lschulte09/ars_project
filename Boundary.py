@@ -1,0 +1,20 @@
+import pygame
+from pygame.math import Vector2
+
+
+class Boundary:
+    def __init__(self, screen_width, screen_height, offset):
+        self.points = [Vector2(offset, offset),
+                       Vector2(screen_width - offset, offset),
+                       Vector2(screen_width - offset, screen_height - offset),
+                       Vector2(offset, screen_height - offset)]
+        self.x = offset
+        self.y = offset
+        self.width = screen_width - 2*offset
+        self.height = screen_height - 2*offset
+
+    def draw(self, screen):
+        pygame.draw.rect(screen, (255, 255, 255), (self.x, self.y, self.width, self.height))
+
+    def get_points(self):
+        return self.points

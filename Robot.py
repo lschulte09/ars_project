@@ -1,12 +1,46 @@
 import numpy as np
 import pygame
 import math
+from pygame.math import Vector2
 from Sensor import Sensor
 
+
+def points_distance(p1, p2):
+    dist = (p2-p1).length()
+    return dist
+
+def points_line_dist(p1, l1, l2):
+    line = l2 - l1
+    ap = p1 - l1
+    project = ap.dot(line) / line.length_squared()
+    project = max(0, min(1, project))
+    closest = l1 + line * project
+    dist = (p1 - closest).length()
+    return dist, closest
+
+def points_line_dist_norm(p1, l1, l2):
+    line = l2 - l1
+    ap = p1 - l1
+    project = ap.dot(line) / line.length_squared()
+    project = max(0, min(1, project))
+    closest = l1 + line * project
+    dist = (p1 - closest).length()
+
+    if project == 0 or project == 1:
+        end = l1 if project == 0 else l2
+        end_vec = (end - p1).normalize()
+        norm = end_vec.rotate(90)
+        return norm, dist
+
+    else:
+        norm = line.normalize()
+        return norm, dist
+
 class Robot:
-    def __init__(self, x, y, theta):
+    def __init__(self, x, y, theta, lm_range = 200, sensor_range = 200):
         self.x = x  # position x-coordinate
         self.y = y  # position y-coordinate
+        self.pos = Vector2(x, y)
         self.v_left = 0.0  # left wheel velocity
         self.v_right = 0.0  # right wheel velocity
         self.radius = 30  # robot radius
@@ -15,9 +49,13 @@ class Robot:
         self.v = (self.v_right+self.v_left)/2
         self.theta = theta  # orientation in radians
         self.max_speed = 20
+        self.move_vec = Vector2(0, 0)
+        self.lm_range = lm_range
+        self.sensor_range = sensor_range
+        self.bearings = []
         
         # Create 12 sensors placed every 30 degrees (360°/12)
-        self.sensors = [Sensor(np.deg2rad(angle), 200) for angle in range(0, 360, 30)]
+        self.sensors = [Sensor(np.deg2rad(angle), sensor_range) for angle in range(0, 360, 30)]
         
         # Collision flag
         self.collision = False
@@ -76,53 +114,117 @@ class Robot:
         angular_velocity = (self.v_right - self.v_left) / self.wheel_distance
         return linear_velocity, angular_velocity
 
-    def move(self, dt=0.1, obstacles=None):
+    def move(self, dt=0.1, obstacles=None, landmarks=None):
         """
         Updates the robot's pose using differential drive kinematics.
         Handles collision detection if obstacles are provided.
         """
         # Save current position as the last valid position
-        self.last_valid_x = self.x
-        self.last_valid_y = self.y
-        self.last_valid_theta = self.theta
-        
+        #self.last_valid_x = self.x
+        #self.last_valid_y = self.y
+        #self.last_valid_theta = self.theta
+
+
+
         # Calculate velocities from wheel velocities
         linear_velocity, angular_velocity = self.calculate_velocities()
         
         # Update position and orientation
-        self.theta += angular_velocity * dt
+        self.theta -= angular_velocity * dt
         self.x += linear_velocity * np.cos(self.theta) * dt
         self.y += linear_velocity * np.sin(self.theta) * dt
+
+        dir_vec = Vector2(1, 0).rotate_rad(self.theta)
+        self.move_vec = dir_vec * linear_velocity * dt
         
         # Normalize angle to keep it within [0, 2π]
         self.theta = self.theta % (2 * math.pi)
-        
+
+        new_pos = self.pos + self.move_vec
+
+        # check collision
+        for obstacle in obstacles:
+            points = obstacle.get_points()
+            lines = [[points[i], points[i + 1]] for i in range(len(points) - 1)]
+            lines.append([points[-1], points[0]])
+            for line in lines:
+                norm, dist = points_line_dist_norm(new_pos, line[0], line[1])
+
+                if dist <= self.radius:
+                    self.move_vec = self.move_vec.dot(norm) * norm
+
+        # self.move_vec = check_collision_vec(obstacles)
+        new_pos = self.pos + self.move_vec
+
+        # backwards check for illegal move, "bump out of wall"
+        for obstacle in obstacles:
+            points = obstacle.get_points()
+            lines = [[points[i], points[i + 1]] for i in range(len(points) - 1)]
+            lines.append([points[-1], points[0]])
+            for line in lines:
+                dist, closest_point = points_line_dist(new_pos, line[0], line[1])
+
+                if dist < self.radius:
+                    diff = self.radius - dist
+                    dir = (new_pos - closest_point).normalize()
+                    new_pos = new_pos + dir * diff
+
+        self.pos = new_pos
+        self.x = self.pos.x
+        self.y = self.pos.y
+
+        self.bearings = []
+        for landmark in landmarks:
+            lm_pos = landmark.get_pos()
+            lm_dist = points_distance(self.pos, lm_pos)
+            if lm_dist < self.lm_range:
+                self.bearings.append(landmark)
+
+
+
         # Check for collisions if obstacles are provided
         # need to implement sliding, use vector2 maybe
-        if obstacles:
-            if self.check_collision(obstacles):
-                # Collision detected, revert to last valid position
-                self.x = self.last_valid_x
-                self.y = self.last_valid_y
-                self.theta = self.last_valid_theta
-                self.collision = True
-                return False  # Movement failed due to collision
-            else:
-                self.collision = False
+        # if obstacles:
+        #     if self.check_collision(obstacles):
+        #         # Collision detected, revert to last valid position
+        #         self.x = self.last_valid_x
+        #         self.y = self.last_valid_y
+        #         self.theta = self.last_valid_theta
+        #         self.collision = True
+        #         return False  # Movement failed due to collision
+        #     else:
+        #         self.collision = False
                 
-        return True  # Movement successful
+        # return True  # Movement successful
 
     def get_pose(self):
         return (self.x, self.y, self.theta)
 
+    def check_collision_vec(self, obstacles, move_vec):
+        for obstacle in obstacles:
+            points = obstacle.get_points()
+            lines = [[points[i], points[i+1]] for i in range(len(points)-1)]
+            lines.append([points[-1], points[0]])
+            for line in lines:
+                norm, dist = points_line_dist_norm(self.pos, line[0], line[1])
+
+                if dist <= self.radius:
+                    move_vec = move_vec.dot(norm)*norm
+
+        return move_vec
+
+
+
+
     def draw(self, screen):
         # Draw the robot body
-        pygame.draw.circle(screen, (255, 0, 0), (int(self.x), int(self.y)), self.radius, 0)
+        pygame.draw.circle(screen, (255, 0, 0), self.pos, self.radius, 0)
         
         # Draw a line indicating the robot's orientation
         line_x = self.x + self.radius * math.cos(self.theta)
         line_y = self.y + self.radius * math.sin(self.theta)
-        pygame.draw.line(screen, (0, 0, 0), (int(self.x), int(self.y)), (int(line_x), int(line_y)), 3)
+        line_end = self.pos + Vector2(self.radius, 0).rotate_rad(self.theta)
+        pygame.draw.line(screen, (0, 0, 0), self.pos, line_end, 3)
         
         # Draw sensors
         for i, sensor in enumerate(self.sensors):

@@ -4,32 +4,43 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pygame
 from matplotlib.patches import Rectangle, Circle
+
+from Boundary import Boundary
 from DustParticle import DustParticle
+from Landmark import Landmark
 from Obstacle import Obstacle
 from Robot import Robot
 
 
+
+
 class MapEnvironment:
-    def __init__(self, width, height, num_obstacles=5, num_dust=0, num_landmarks = 0):
+    def __init__(self, width, height, num_obstacles=5, num_dust=0, num_landmarks = 0, draw_bearings = False):
         self.width = width
         self.height = height
         self.obstacles = []
         self.dust_particles = []
         self.landmarks = []
+        self.boundary = Boundary(self.width, self.height, 20)
+        self.obstacles_boundary = [Obstacle(self.boundary.x, self.boundary.y, self.boundary.width, self.boundary.height)]
         self.robot = None
+        self.draw_bearings = draw_bearings
         self.screen = pygame.display.set_mode((self.width, self.height))
         pygame.display.set_caption("Robot Simulation")
         self.generate_obstacles(num_obstacles)
         self.generate_dust(num_dust)
         self.num_landmarks = num_landmarks
+        self.generate_landmarks()
         self.font = pygame.font.SysFont(None, 24)
-        
+
         # Control params
         self.v_left = 0.0
         self.v_right = 0.0
         self.step_size = 1.0  # Velocity increment
 
     def generate_obstacles(self, num):
+
+
         for _ in range(num):
             # Random dimensions for each obstacle
             obs_width = random.uniform(30, 80)
@@ -37,12 +48,16 @@ class MapEnvironment:
             # Ensure obstacles are within the map bounds
             x = random.uniform(0, self.width - obs_width)
             y = random.uniform(0, self.height - obs_height)
-            self.obstacles.append(Obstacle(x, y, obs_width, obs_height))
+            obs = Obstacle(x, y, obs_width, obs_height)
+            self.obstacles.append(obs)
+            self.obstacles_boundary.append(obs)
+
 
     def generate_landmarks(self):
         for _ in range(self.num_landmarks):
-            x = random.uniform(0, self.width - self.width / 2)
-            y = random.uniform(0, self.height - self.height / 2)
+            x = random.uniform(0, self.width)
+            y = random.uniform(0, self.height)
+            self.landmarks.append(Landmark(x, y, self.draw_bearings))
 
     def generate_dust(self, num):
         for _ in range(num):
@@ -56,7 +71,7 @@ class MapEnvironment:
         # we check for not colliding with all the stuff
         self.robot = Robot(self.width/2, self.height/2, random.uniform(0, 2 * math.pi))
         # Initial sensor update
-        self.robot.update_sensors(self.obstacles)
+        self.robot.update_sensors(self.obstacles_boundary)
 
     def handle_input(self, event):
         """
@@ -127,12 +142,14 @@ class MapEnvironment:
         """
         if self.robot:
             # Move the robot
-            self.robot.move(dt=0.1, obstacles=self.obstacles)
+            self.robot.move(dt=0.1, obstacles=self.obstacles_boundary)
             # Update sensor readings
-            self.robot.update_sensors(self.obstacles)
+            self.robot.update_sensors(self.obstacles_boundary)
 
     def draw_screen(self):
-        self.screen.fill('white')
+        self.screen.fill('gray')
+
+        self.boundary.draw(self.screen)
         
         # Draw obstacles
         for obstacle in self.obstacles:
@@ -145,6 +162,11 @@ class MapEnvironment:
         # Draw robot
         if self.robot:
             self.robot.draw(self.screen)
+
+        for landmark in self.landmarks:
+            landmark.draw(self.screen, self.robot)
+
+
             
         # Draw control information
         text_y = 10
