@@ -151,12 +151,22 @@ class MapEnvironment:
         self.robot.set_wheel_velocities(self.v_left, self.v_right)
 
     def update(self):
+        underlying_square_length = self.robot.radius * 1.41
         """
         Update the environment state.
         """
         if self.robot:
             # Move the robot
             self.robot.move(dt=0.1, obstacles=self.obstacles_boundary, landmarks = self.landmarks)
+            # lets assume for now that there is a square under the vacuum that sucks it up to ease computational burden
+            # and lets make it suck it up the dust particles
+            for i in range(len(self.dust_particles)):
+                dust_particle = self.dust_particles[i]
+                if (    self.robot.x - underlying_square_length/2 < dust_particle.x < self.robot.x + underlying_square_length / 2
+                        and
+                        self.robot.y - underlying_square_length/2 < dust_particle.y < self.robot.y + underlying_square_length / 2):
+                    self.dust_particles.pop(i)
+                    break
             # Update sensor readings
             self.robot.update_sensors(self.obstacles_boundary + self.dust_particles)
 
