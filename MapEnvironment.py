@@ -77,8 +77,8 @@ class MapEnvironment:
                         and
                         obstacle.y <= rand_y_robot < obstacle.y + obstacle.height):
                     boo += 1
-            rand_x_robot = random.uniform(0, self.width)
-            rand_y_robot = random.uniform(0, self.height)
+            rand_x_robot = random.uniform(50, self.width-50)
+            rand_y_robot = random.uniform(50, self.height-50)
 
 
 
