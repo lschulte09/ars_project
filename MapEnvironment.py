@@ -15,7 +15,7 @@ from Robot import Robot
 
 
 class MapEnvironment:
-    def __init__(self, width, height, num_obstacles=5, num_dust=0, num_landmarks = 0, draw_bearings = False):
+    def __init__(self, width, height, num_obstacles=5, num_dust=20, num_landmarks = 0, draw_bearings = False):
         self.width = width
         self.height = height
         self.obstacles = []
@@ -31,7 +31,7 @@ class MapEnvironment:
         self.generate_dust(num_dust)
         self.num_landmarks = num_landmarks
         self.generate_landmarks()
-        self.font = pygame.font.SysFont(None, 24)
+        self.font = pygame.font.SysFont('Arial', 24)
 
         # Control params
         self.v_left = 0.0
@@ -63,13 +63,27 @@ class MapEnvironment:
         for _ in range(num):
             x = random.uniform(0, self.width)
             y = random.uniform(0, self.height)
-            self.dust_particles.append(DustParticle(x, y))
+            self.dust_particles.append(DustParticle(x, y, width=4, height=4))
 
     def place_robot(self):
         rand_x_robot = random.uniform(0, self.width)
         rand_y_robot = random.uniform(0, self.height)
-        # we check for not colliding with all the stuff
-        self.robot = Robot(self.width/2, self.height/2, random.uniform(0, 2 * math.pi))
+        # make sure robot doesn't spawn in an obstacle
+        boo = 0
+        while boo < len(self.obstacles):
+            boo = 0
+            for obstacle in self.obstacles:
+                if not (obstacle.x <= rand_x_robot <= obstacle.x + obstacle.width
+                        and
+                        obstacle.y <= rand_y_robot < obstacle.y + obstacle.height):
+                    boo += 1
+            rand_x_robot = random.uniform(0, self.width)
+            rand_y_robot = random.uniform(0, self.height)
+
+
+
+        rand_theta = random.uniform(0, 2 * math.pi)
+        self.robot = Robot(rand_x_robot, rand_y_robot, rand_theta)
         # Initial sensor update
         self.robot.update_sensors(self.obstacles_boundary)
 
@@ -144,7 +158,7 @@ class MapEnvironment:
             # Move the robot
             self.robot.move(dt=0.1, obstacles=self.obstacles_boundary, landmarks = self.landmarks)
             # Update sensor readings
-            self.robot.update_sensors(self.obstacles_boundary)
+            self.robot.update_sensors(self.obstacles_boundary + self.dust_particles)
 
     def draw_screen(self):
         self.screen.fill('gray')

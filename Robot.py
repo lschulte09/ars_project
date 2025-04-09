@@ -67,12 +67,12 @@ class Robot:
 
     def update_sensors(self, obstacles):
         """
-        Update all sensor readings.
+        Update all sensor readings for obstacles.
         """
         for sensor in self.sensors:
             sensor.read_distance(self, obstacles)
             
-    def check_collision(self, obstacles):
+    def check_collision(self, obstacles, dust_particles):
         """
         Check if the robot is colliding with any obstacle.
         """

@@ -10,6 +10,7 @@ GRAY = (128, 128, 128)
 BLUE = (0, 0, 255)
 YELLOW = (255, 255, 0)
 GREEN = (0, 255, 0)
+RED = (255, 0, 0)
 
 # Obstacle class: a rectangular barrier.
 class Obstacle:

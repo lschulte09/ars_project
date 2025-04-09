@@ -1,13 +1,10 @@
 import pygame
 
-from Obstacle import YELLOW
+from Obstacle import Obstacle, RED
 
 
-class DustParticle:
-    def __init__(self, x, y):
-        self.x = x
-        self.y = y
-        self.radius = 3
+class DustParticle(Obstacle):
 
     def draw(self, screen):
-        pygame.draw.circle(screen, YELLOW, (int(self.x), int(self.y)), self.radius)
+        pygame.draw.rect(screen, RED, pygame.Rect(self.x, self.y, self.width, self.height))
+    pass
