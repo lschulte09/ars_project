@@ -7,8 +7,8 @@ def points_distance(p1, p2):
     return dist
 
 def line_intersect(l1, l2):
-    r = l1[1] - l1[0]
-    s = l2[1] - l2[0]
+    r = l1[0] - l1[1]
+    s = l2[0] - l2[1]
 
     cross_rs = r.cross(s)
     q_minus_p = l1[0] - l2[0]
@@ -29,7 +29,7 @@ class Sensor:
         self.max_range = max_range
         self.current_distance = max_range  # Current reading, initialized to max_range
 
-    def read_distance(self, robot, obstacles, type = 'rect'):
+    def read_distance(self, robot, obstacles, type = 'poly'):
         """
         Calculate the distance from the robot to the nearest obstacle in the sensor's direction.
         Returns the distance to the obstacle, or max_range if no obstacle is detected.
@@ -65,11 +65,16 @@ class Sensor:
     def check_line_intersect(self, p, obstacle, angle):
         end = p + Vector2(math.cos(angle), math.sin(angle)) * self.max_range
         sens_line = [p, end]
+        min_distance = self.max_range
         for edge in obstacle.get_edges():
             intersect = line_intersect(sens_line, edge)
-            if intersect:
-                return points_distance(p, intersect)
-            return None
+            if intersect is not None:
+                dist = points_distance(p, intersect)
+                if min_distance > dist:
+                    min_distance = dist
+        if min_distance < self.max_range:
+            return min_distance
+        return None
 
 
 

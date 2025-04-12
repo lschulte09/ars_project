@@ -192,7 +192,7 @@ class MapEnvironment:
                     self.dust_particles.pop(i)
                     break
             # Update sensor readings
-            self.robot.update_sensors(self.poly_obstacles + self.dust_particles)
+            self.robot.update_sensors(self.poly_obstacles) # + dust_particles
 
     def draw_screen(self):
         self.screen.fill('gray')
