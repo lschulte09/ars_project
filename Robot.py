@@ -37,14 +37,14 @@ def points_line_dist_norm(p1, l1, l2):
         return norm, dist
 
 class Robot:
-    def __init__(self, x, y, theta, lm_range = 200, sensor_range = 200):
+    def __init__(self, x, y, theta, lm_range = 200, sensor_range = 200, draw_trail = False, draw_ghost = False):
         self.x = x  # position x-coordinate
         self.y = y  # position y-coordinate
         self.pos = Vector2(x, y)
         self.v_left = 0.0  # left wheel velocity
         self.v_right = 0.0  # right wheel velocity
         self.radius = 30  # robot radius
-        self.wheel_radius = 5.0  # wheel radius
+        self.wheel_radius = 5.0  # wheel radius - is this ever used?
         self.wheel_distance = self.radius*2  # distance between wheels
         self.v = (self.v_right+self.v_left)/2
         self.theta = theta  # orientation in radians
@@ -52,6 +52,8 @@ class Robot:
         self.move_vec = Vector2(0, 0)
         self.lm_range = lm_range
         self.sensor_range = sensor_range
+        self.draw_trail = draw_trail
+        self.draw_ghost = draw_ghost
         self.bearings = []
         
         # Create 12 sensors placed every 30 degrees (360°/12)
@@ -70,7 +72,7 @@ class Robot:
         Update all sensor readings for obstacles.
         """
         for sensor in self.sensors:
-            sensor.read_distance(self, obstacles)
+            sensor.read_distance(self, obstacles, type = 'poly')
             
     def check_collision(self, obstacles, dust_particles):
         """
@@ -145,6 +147,7 @@ class Robot:
         # check collision
         for obstacle in obstacles:
             points = obstacle.get_points()
+            # might have to change this for non convex obstacles (also see backwards check), create get_lines in obstacle?
             lines = [[points[i], points[i + 1]] for i in range(len(points) - 1)]
             lines.append([points[-1], points[0]])
             for line in lines:

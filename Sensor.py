@@ -1,5 +1,27 @@
 import math
 import pygame
+from pygame.math import Vector2
+
+def points_distance(p1, p2):
+    dist = (p2-p1).length()
+    return dist
+
+def line_intersect(l1, l2):
+    r = l1[1] - l1[0]
+    s = l2[1] - l2[0]
+
+    cross_rs = r.cross(s)
+    q_minus_p = l1[0] - l2[0]
+
+    t = q_minus_p.cross(s) / cross_rs
+    u = q_minus_p.cross(r) / cross_rs
+
+    # Check if intersection lies within both segments
+    if 0 <= t <= 1 and 0 <= u <= 1:
+        intersection_point = l1[0] + r * t
+        return intersection_point
+
+    return None
 
 class Sensor:
     def __init__(self, relative_angle, max_range):
@@ -7,7 +29,7 @@ class Sensor:
         self.max_range = max_range
         self.current_distance = max_range  # Current reading, initialized to max_range
 
-    def read_distance(self, robot, obstacles):
+    def read_distance(self, robot, obstacles, type = 'rect'):
         """
         Calculate the distance from the robot to the nearest obstacle in the sensor's direction.
         Returns the distance to the obstacle, or max_range if no obstacle is detected.
@@ -16,21 +38,42 @@ class Sensor:
         sensor_angle = robot.theta + self.relative_angle
         
         # Starting point (robot's position)
+        start = robot.pos
         start_x, start_y = robot.pos.x, robot.pos.y
         
         # Initialize with max range
         min_distance = self.max_range
-        
+
+        if type == 'rect':
         # Check for collisions with rectangular obstacles
-        for obstacle in obstacles:
-            # Find intersection with rectangular obstacle
-            distance = self._check_rect_intersection(start_x, start_y, sensor_angle, obstacle)
-            if distance < min_distance:
-                min_distance = distance
-        
+            for obstacle in obstacles:
+                # Find intersection with rectangular obstacle
+                distance = self._check_rect_intersection(start_x, start_y, sensor_angle, obstacle)
+                if distance < min_distance:
+                    min_distance = distance
+
+        if type == 'poly':
+            for obstacle in obstacles:
+                dist = self.check_line_intersect(start, obstacle, sensor_angle)
+                if dist is not None and dist < min_distance:
+                    min_distance = dist
+
         # Update the current distance reading
         self.current_distance = min_distance
         return min_distance
+
+    def check_line_intersect(self, p, obstacle, angle):
+        end = p + Vector2(math.cos(angle), math.sin(angle)) * self.max_range
+        sens_line = [p, end]
+        for edge in obstacle.get_edges():
+            intersect = line_intersect(sens_line, edge)
+            if intersect:
+                return points_distance(p, intersect)
+            return None
+
+
+
+
 
     def _check_rect_intersection(self, x, y, angle, obstacle):
         """

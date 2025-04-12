@@ -4,18 +4,27 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pygame
 from matplotlib.patches import Rectangle, Circle
-
+from pygame.math import Vector2
 from Boundary import Boundary
 from DustParticle import DustParticle
 from Landmark import Landmark
 from Obstacle import Obstacle
+from PolyObstacle import PolyObstacle
 from Robot import Robot
 
 
-
+def generate_polygon(center, radius, num_vertices):
+    angles = sorted([random.uniform(0, 2 * math.pi) for _ in range(num_vertices)])
+    points = []
+    for angle in angles:
+        r = int(radius * (0.8 + 0.2 * random.random()))  # Slight variation
+        x = center.x + r * math.cos(angle)
+        y = center.y + r * math.sin(angle)
+        points.append(Vector2(x, y))
+    return points
 
 class MapEnvironment:
-    def __init__(self, width, height, num_obstacles=5, num_dust=20, num_landmarks = 0, draw_bearings = False):
+    def __init__(self, width, height, num_obstacles=5, num_dust=20, num_landmarks = 0, draw_bearings = False, obstacle_type = 'poly'):
         self.width = width
         self.height = height
         self.obstacles = []
@@ -23,11 +32,15 @@ class MapEnvironment:
         self.landmarks = []
         self.boundary = Boundary(self.width, self.height, 20)
         self.obstacles_boundary = [Obstacle(self.boundary.x, self.boundary.y, self.boundary.width, self.boundary.height)]
+        self.poly_obstacles = [PolyObstacle(self.boundary.get_points())]
         self.robot = None
         self.draw_bearings = draw_bearings
         self.screen = pygame.display.set_mode((self.width, self.height))
         pygame.display.set_caption("Robot Simulation")
-        self.generate_obstacles(num_obstacles)
+        if obstacle_type == 'rect':
+            self.generate_obstacles(num_obstacles)
+        if obstacle_type == 'poly':
+            self.generate_poly_obstacles(num_obstacles)
         self.generate_dust(num_dust)
         self.num_landmarks = num_landmarks
         self.generate_landmarks()
@@ -53,6 +66,17 @@ class MapEnvironment:
             self.obstacles_boundary.append(obs)
 
 
+    def generate_poly_obstacles(self, num):
+        for _ in range(num):
+            pos = Vector2(random.uniform(0, self.width), random.uniform(0, self.height))
+            radius = int(random.uniform(40, 100))
+            n_vert = int(random.uniform(3, 8))
+            points = generate_polygon(pos, radius, n_vert)
+            obs = PolyObstacle(points)
+            self.obstacles.append(obs)
+            self.poly_obstacles.append(obs)
+
+
     def generate_landmarks(self):
         for _ in range(self.num_landmarks):
             x = random.uniform(0, self.width)
@@ -70,22 +94,22 @@ class MapEnvironment:
         rand_y_robot = random.uniform(0, self.height)
         # make sure robot doesn't spawn in an obstacle
         boo = 0
-        while boo < len(self.obstacles):
-            boo = 0
-            for obstacle in self.obstacles:
-                if not (obstacle.x <= rand_x_robot <= obstacle.x + obstacle.width
-                        and
-                        obstacle.y <= rand_y_robot < obstacle.y + obstacle.height):
-                    boo += 1
-            rand_x_robot = random.uniform(50, self.width-50)
-            rand_y_robot = random.uniform(50, self.height-50)
+        # while boo < len(self.obstacles):
+        #     boo = 0
+        #     for obstacle in self.obstacles:
+        #         if not (obstacle.x <= rand_x_robot <= obstacle.x + obstacle.width
+        #                 and
+        #                 obstacle.y <= rand_y_robot < obstacle.y + obstacle.height):
+        #             boo += 1
+        #     rand_x_robot = random.uniform(50, self.width-50)
+        #     rand_y_robot = random.uniform(50, self.height-50)
 
 
 
         rand_theta = random.uniform(0, 2 * math.pi)
         self.robot = Robot(rand_x_robot, rand_y_robot, rand_theta)
         # Initial sensor update
-        self.robot.update_sensors(self.obstacles_boundary)
+        self.robot.update_sensors(self.poly_obstacles)
 
     def handle_input(self, event):
         """
@@ -157,7 +181,7 @@ class MapEnvironment:
         """
         if self.robot:
             # Move the robot
-            self.robot.move(dt=0.1, obstacles=self.obstacles_boundary, landmarks = self.landmarks)
+            self.robot.move(dt=0.1, obstacles=self.poly_obstacles, landmarks = self.landmarks)
             # lets assume for now that there is a square under the vacuum that sucks it up to ease computational burden
             # and lets make it suck it up the dust particles
             for i in range(len(self.dust_particles)):
@@ -168,7 +192,7 @@ class MapEnvironment:
                     self.dust_particles.pop(i)
                     break
             # Update sensor readings
-            self.robot.update_sensors(self.obstacles_boundary + self.dust_particles)
+            self.robot.update_sensors(self.poly_obstacles + self.dust_particles)
 
     def draw_screen(self):
         self.screen.fill('gray')
@@ -176,7 +200,10 @@ class MapEnvironment:
         self.boundary.draw(self.screen)
         
         # Draw obstacles
-        for obstacle in self.obstacles:
+        # for obstacle in self.obstacles:
+            # obstacle.draw(self.screen)
+
+        for obstacle in self.poly_obstacles[1:]:
             obstacle.draw(self.screen)
             
         # Draw dust particles
