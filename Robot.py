@@ -55,6 +55,8 @@ class Robot:
         self.draw_trail = draw_trail
         self.draw_ghost = draw_ghost
         self.bearings = []
+        # init estimate to initial position (assume robot knows where it starts)
+        self.mu = np.array([[self.pos.x], [self.pos.y], [self.theta]])
         
         # Create 12 sensors placed every 30 degrees (360°/12)
         self.sensors = [Sensor(np.deg2rad(angle), sensor_range) for angle in range(0, 360, 30)]
@@ -66,6 +68,26 @@ class Robot:
         self.last_valid_x = x
         self.last_valid_y = y
         self.last_valid_theta = theta
+
+    def kalman_localisation(self, v, w, dt=0.1):
+        # A: nxn matrix, identity (no control independent changes)
+        # B: control vector? matrix? nxl
+        # C: observation matrix? vector? kxn
+        # eps, sig: random var (normal) with covar R, Q
+        # mu: state (pos, theta)
+        # u: robot control -> B
+        # v, w: linear, angular velocity
+        mu_old = self.mu
+        theta_old = mu_old[2, 0]
+        A = np.array([[1,0,0],
+                      [0,1,0],
+                      [0,0,1]])
+        B = np.array([[dt*math.cos(theta_old), 0],
+                      [dt*math.sin(theta_old), 0],
+                      [0, dt]])
+        u = np.array([[v], [w]])
+
+        mu_guess = mu_old@A + B@u
 
     def update_sensors(self, obstacles):
         """
@@ -130,6 +152,8 @@ class Robot:
 
         # Calculate velocities from wheel velocities
         linear_velocity, angular_velocity = self.calculate_velocities()
+
+        self.kalman_localisation(linear_velocity, angular_velocity)
         
         # Update position and orientation
         self.theta -= angular_velocity * dt
