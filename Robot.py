@@ -52,7 +52,27 @@ def trilaterate(p1, d1, p2, d2, p3, d3):
         result = p1 + x * ex + y * ey
         return result
 
+def two_landmark_localize(p1, d1, b1, p2, d2, b2):
+    # Step 1: Local vectors (landmarks in robot frame)
+    v1_local = Vector2(d1 * math.cos(b1), d1 * math.sin(b1))
+    v2_local = Vector2(d2 * math.cos(b2), d2 * math.sin(b2))
 
+    v_local = v2_local - v1_local
+
+    # Step 2: World vectors (difference between landmarks)
+    v_world = Vector2(p2) - Vector2(p1)
+
+    # Step 3: Compute θ
+    theta = -math.radians(v_world.angle_to(v_local))  # convert to radians
+
+    # Step 4: Solve for robot position using one landmark
+    v1_rotated = Vector2(
+        v1_local.x * math.cos(theta) - v1_local.y * math.sin(theta),
+        v1_local.x * math.sin(theta) + v1_local.y * math.cos(theta)
+    )
+    pos = Vector2(p1) - v1_rotated
+
+    return pos
 
 class Robot:
     def __init__(self, x, y, theta, lm_range = 200, sensor_range = 200, draw_trail = False, draw_ghost = False):
@@ -136,6 +156,18 @@ class Robot:
             landmark_list = []
             for key in self.vis_landmarks.keys():
                 landmark_list.append(key)
+
+            if len(self.vis_landmarks) == 2:
+                p1 = Vector2(landmark_list[0])
+                d1 = self.vis_landmarks[landmark_list[0]][0]
+                b1 = self.vis_landmarks[landmark_list[0]][1]
+                p2 = Vector2(landmark_list[1])
+                d2 = self.vis_landmarks[landmark_list[1]][0]
+                b2 = self.vis_landmarks[landmark_list[1]][1]
+                guess = two_landmark_localize(p1, d1, b1, p2, d2, b2)
+                # simulate sensor noise
+                pos_est = self.add_noise_to_point(guess)
+
             if len(self.vis_landmarks) == 3:
                 p1 = Vector2(landmark_list[0])
                 d1 = self.vis_landmarks[landmark_list[0]][0]
@@ -258,8 +290,7 @@ class Robot:
         # Calculate velocities from wheel velocities
         linear_velocity, angular_velocity = self.calculate_velocities()
 
-        self.kalman_localisation(linear_velocity, angular_velocity)
-        
+
         # Update position and orientation
         self.theta -= angular_velocity * dt
         self.x += linear_velocity * np.cos(self.theta) * dt
