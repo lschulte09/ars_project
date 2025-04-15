@@ -140,7 +140,7 @@ class Robot:
         B = np.array([[dt*math.cos(theta_old), 0],
                       [dt*math.sin(theta_old), 0],
                       [0, dt]])
-        u = np.array([[v], [w]])
+        u = np.array([[v], [-w]])
         C = np.identity(3)
 
         # initial prediction
