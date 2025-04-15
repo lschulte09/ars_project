@@ -4,10 +4,11 @@ from Obstacle import BLUE
 from Robot import points_distance
 
 class Landmark:
-    def __init__(self, x, y, draw_bearings = False):
+    def __init__(self, x, y, signature):
         self.x = x
         self.y = y
         self.pos = Vector2(self.x, self.y)
+        self.sign = signature
 
     def get_pos(self):
         return self.pos

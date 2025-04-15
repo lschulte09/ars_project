@@ -24,7 +24,7 @@ def generate_polygon(center, radius, num_vertices):
     return points
 
 class MapEnvironment:
-    def __init__(self, width, height, num_obstacles=5, num_dust=20, num_landmarks = 0, draw_bearings = False, obstacle_type = 'poly'):
+    def __init__(self, width, height, num_obstacles=5, num_dust=20, num_landmarks = 0, draw_kalman = False, obstacle_type = 'poly'):
         self.width = width
         self.height = height
         self.obstacles = []
@@ -34,7 +34,7 @@ class MapEnvironment:
         self.obstacles_boundary = [Obstacle(self.boundary.x, self.boundary.y, self.boundary.width, self.boundary.height)]
         self.poly_obstacles = [PolyObstacle(self.boundary.get_points())]
         self.robot = None
-        self.draw_bearings = draw_bearings
+        self.draw_kalman = draw_kalman
         self.screen = pygame.display.set_mode((self.width, self.height))
         pygame.display.set_caption("Robot Simulation")
         if obstacle_type == 'rect':
@@ -78,10 +78,11 @@ class MapEnvironment:
 
 
     def generate_landmarks(self):
-        for _ in range(self.num_landmarks):
+        for i in range(self.num_landmarks):
             x = random.uniform(0, self.width)
             y = random.uniform(0, self.height)
-            self.landmarks.append(Landmark(x, y, self.draw_bearings))
+            # numerate landmarks for signatures
+            self.landmarks.append(Landmark(x, y, i))
 
     def generate_dust(self, num):
         for _ in range(num):
@@ -107,7 +108,7 @@ class MapEnvironment:
 
 
         rand_theta = random.uniform(0, 2 * math.pi)
-        self.robot = Robot(rand_x_robot, rand_y_robot, rand_theta)
+        self.robot = Robot(rand_x_robot, rand_y_robot, rand_theta, draw_trail=self.draw_kalman, draw_ghost=self.draw_kalman)
         # Initial sensor update
         self.robot.update_sensors(self.poly_obstacles)
 
