@@ -2,6 +2,7 @@ import random
 import numpy as np
 import pygame
 import math
+import numpy.linalg as LA
 from pygame.math import Vector2
 from Sensor import Sensor
 
@@ -86,7 +87,7 @@ class Robot:
         self.wheel_distance = self.radius*2  # distance between wheels
         self.v = (self.v_right+self.v_left)/2
         self.theta = theta  # orientation in radians
-        self.max_speed = 20
+        self.max_speed = 30
         self.eps_dist = 5 # distance sensor noise
         self.eps_ang = 0.1 # angle sensor noise
         self.move_vec = Vector2(0, 0)
@@ -105,9 +106,9 @@ class Robot:
         self.mu = np.array([[self.pos.x], [self.pos.y], [self.theta]])
         self.Sigma = np.identity(3)
         # Covariance matrix for motion error
-        self.R = np.array([[0.5, 0, 0],
-                           [0, 0.5, 0],
-                           [0, 0, 0.05]])
+        self.R = np.array([[5, 0, 0],
+                           [0, 5, 0],
+                           [0, 0, 0.2]])
         self.Q = np.array([[2, 0, 0],
                            [0, 2, 0],
                            [0, 0, 0.05]])
@@ -184,10 +185,10 @@ class Robot:
                 for index, i in enumerate(landmark_list):
                     p1 = Vector2(i)
                     d1 = self.vis_landmarks[i][0]
-                    p2 = Vector2(landmark_list[index+1])
-                    d2 = self.vis_landmarks[landmark_list[index+1]][0]
-                    p3 = Vector2(landmark_list[index+2])
-                    d3 = self.vis_landmarks[landmark_list[index+1]][0]
+                    p2 = Vector2(landmark_list[(index+1) % len(landmark_list)])
+                    d2 = self.vis_landmarks[landmark_list[(index+1) % len(landmark_list)]][0]
+                    p3 = Vector2(landmark_list[(index+2) % len(landmark_list)])
+                    d3 = self.vis_landmarks[landmark_list[(index+2) % len(landmark_list)]][0]
 
                     guess = trilaterate(p1, d1, p2, d2, p3, d3)
                     # simulate sensor noise
@@ -423,6 +424,26 @@ class Robot:
             # Draw a line indicating the robot's orientation
             line_end = ghost_pos + Vector2(self.radius, 0).rotate_rad(ghost_theta)
             pygame.draw.line(screen, (0, 0, 255), ghost_pos, line_end, 3)
+
+            pos_cov = self.Sigma[:2, :2]
+            eigenvalues, eigenvectors = LA.eig(pos_cov)
+            order = eigenvalues.argsort()[::-1]
+            eigenvalues = eigenvalues[order]
+            eigenvectors = eigenvectors[:, order]
+
+            angle = math.atan2(eigenvectors[1, 0], eigenvectors[0, 0])  # Orientation of ellipse
+            angle_deg = math.degrees(angle)
+
+            std_devs = 2.0 * np.sqrt(eigenvalues)  # 2-sigma ellipse
+            ellipse_width = std_devs[0] * 2
+            ellipse_height = std_devs[1] * 2
+            ellipse_surf = pygame.Surface((ellipse_width, ellipse_height), pygame.SRCALPHA)
+            pygame.draw.ellipse(ellipse_surf, (0, 0, 255, 50), (0, 0, ellipse_width, ellipse_height))
+
+            rotated_ellipse = pygame.transform.rotate(ellipse_surf, -angle_deg)  # Pygame uses clockwise rotation
+            ellipse_rect = rotated_ellipse.get_rect(center=(ghost_pos.x, ghost_pos.y))
+
+            screen.blit(rotated_ellipse, ellipse_rect)
 
             if self.draw_trail:
                 for i in self.ghost_trail:
