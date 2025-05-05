@@ -449,6 +449,20 @@ class Robot:
                 for i in self.ghost_trail:
                     pygame.draw.circle(screen, (0, 0, 255), (int(i[0]), int(i[1])), 1)
 
+    def get_sensor_data(self):
+        sensor_data = []
+        for sensor in self.sensors:
+        # Calculate absolute angle of the sensor in world coordinates
+            sensor_angle = self.theta + sensor.relative_angle
+        # Check if sensor detected an obstacle
+            hit = sensor.current_distance < sensor.max_range
+        # Get endpoint coordinates
+            endpoint = sensor.get_end_point(self)
+        
+            sensor_data.append((sensor_angle, sensor.current_distance, hit, endpoint))
+    
+        return sensor_data    
+
 
 
 
