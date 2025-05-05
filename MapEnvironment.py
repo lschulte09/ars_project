@@ -11,6 +11,7 @@ from Landmark import Landmark
 from Obstacle import Obstacle
 from PolyObstacle import PolyObstacle
 from Robot import Robot
+from Mapping import OccupancyGridMapping, EKFSLAMMapping
 
 
 def generate_polygon(center, radius, num_vertices):
@@ -24,7 +25,7 @@ def generate_polygon(center, radius, num_vertices):
     return points
 
 class MapEnvironment:
-    def __init__(self, width, height, num_obstacles=5, num_dust=20, num_landmarks = 0, draw_kalman = False, obstacle_type = 'poly'):
+    def __init__(self, width, height, num_obstacles=5, num_dust=20, num_landmarks = 0, draw_kalman = False, obstacle_type = 'poly', draw_occupancy=False, occupancy_resolution=20, draw_slam=False, slam_Q=np.eye(3)*0.1, slam_R=np.eye(2)*0.5, slam_max_landmarks=50):
         self.width = width
         self.height = height
         self.obstacles = []
@@ -33,10 +34,11 @@ class MapEnvironment:
         self.boundary = Boundary(self.width, self.height, 20)
         self.obstacles_boundary = [Obstacle(self.boundary.x, self.boundary.y, self.boundary.width, self.boundary.height)]
         self.poly_obstacles = [PolyObstacle(self.boundary.get_points())]
-        self.robot = None
         self.draw_kalman = draw_kalman
+        self.place_robot()
         self.screen = pygame.display.set_mode((self.width, self.height))
         pygame.display.set_caption("Robot Simulation")
+        self.clock = pygame.time.Clock()
         if obstacle_type == 'rect':
             self.generate_obstacles(num_obstacles)
         if obstacle_type == 'poly':
@@ -50,6 +52,22 @@ class MapEnvironment:
         self.v_left = 0.0
         self.v_right = 0.0
         self.step_size = 1.0  # Velocity increment
+
+         # occupancy
+        self.draw_occupancy = draw_occupancy
+        if draw_occupancy:
+            self.occupancy_map = OccupancyGridMapping(
+                width=self.width, height=self.height,
+                resolution=occupancy_resolution)
+         # SLAM
+        self.draw_slam = draw_slam
+        if draw_slam:
+            init_pose = self.robot.get_pose()
+            self.slam_map = EKFSLAMMapping(
+                initial_pose=init_pose,
+                Q=slam_Q,
+                R=slam_R,
+                max_landmarks=slam_max_landmarks)
 
     def generate_obstacles(self, num):
 
@@ -194,8 +212,20 @@ class MapEnvironment:
                     break
             # Update sensor readings
             self.robot.update_sensors(self.poly_obstacles) # + dust_particles
+            if self.draw_slam:
+                # control u must be known (v, omega, dt)
+                dt = self.clock.tick(60) / 1000.0
+                u = (self.robot.v, self.robot.omega, dt)
+                readings = [(s.current_distance, s.relative_angle) for s in self.robot.sensors]
+                self.slam_map.update(u, readings)
 
     def draw_screen(self):
+        if self.draw_occupancy:
+            print("i should be drawing this occupancy")
+            self.occupancy_map.draw(self.screen)
+        if self.draw_slam:
+            print("i should be drawing this slam")
+            self.slam_map.draw(self.screen)
         self.screen.fill('gray')
 
         self.boundary.draw(self.screen)
