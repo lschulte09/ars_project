@@ -220,9 +220,8 @@ class Robot():
         pos_est = Vector2(float(mu_guess[0, 0]), float(mu_guess[1, 0]))
 
         # measurement update (only necessary if there is any sensor data)
-        if len(self.vis_landmarks) > 0:
-
         # triangulation check
+        if len(self.vis_landmarks) > 0:
             landmark_list = []
             for key in self.vis_landmarks.keys():
                 landmark_list.append(key)
@@ -362,9 +361,88 @@ class Robot():
     def add_noise_to_point(self,p):
         return p + Vector2(np.random.normal(0, self.eps_dist), np.random.normal(0, self.eps_dist))
 
-    """
-        def move(self, dt=0.1, obstacles=None, landmarks=None):
-    
+    def move_2(self, dt=0.1, obstacles=None, landmarks=None):
+        """
+        One time‐step of true motion + EKF‐SLAM (predict & update),
+        with proper collision handling so the robot stays in bounds.
+        """
+        # 1) True motion update (single integrate)
+        linear_velocity, angular_velocity = self.calculate_velocities()
+        # update heading
+        self.theta = (self.theta - angular_velocity * dt) % (2 * math.pi)
+        # update position
+        self.x += linear_velocity * math.cos(self.theta) * dt
+        self.y += linear_velocity * math.sin(self.theta) * dt
+        self.pos = Vector2(self.x, self.y)
+
+        # 2) Compute intended move vector
+        dir_vec = Vector2(1, 0).rotate_rad(self.theta)
+        self.move_vec = dir_vec * linear_velocity * dt
+
+        # 3) Collision “sliding” against each obstacle
+        new_pos = self.pos + self.move_vec
+        if obstacles:
+            # slide along obstacle edges
+            for obs in obstacles:
+                pts = obs.get_points()
+                # build list of line‐segments around the polygon
+                lines = [(pts[i], pts[i + 1]) for i in range(len(pts) - 1)]
+                lines.append((pts[-1], pts[0]))
+                for l1, l2 in lines:
+                    norm, dist = points_line_dist_norm(new_pos, l1, l2)
+                    if dist <= self.radius:
+                        # project move_vec onto surface normal
+                        self.move_vec = self.move_vec.dot(norm) * norm
+            # re‐compute new_pos after sliding
+            new_pos = self.pos + self.move_vec
+
+            # backward‐push out of any remaining penetration
+            for obs in obstacles:
+                pts = obs.get_points()
+                lines = [(pts[i], pts[i + 1]) for i in range(len(pts) - 1)]
+                lines.append((pts[-1], pts[0]))
+                for l1, l2 in lines:
+                    dist, closest = points_line_dist(new_pos, l1, l2)
+                    if dist < self.radius:
+                        # push out along the normal from the closest point
+                        push_dir = (new_pos - closest).normalize()
+                        new_pos += push_dir * (self.radius - dist)
+
+        # 4) Apply corrected position
+        self.pos = new_pos
+        self.x, self.y = new_pos.x, new_pos.y
+
+        # 5) Sensor update on true pose
+        self.update_sensors(obstacles)
+
+        # 6) Build measurement dict for all visible landmarks
+        self.measurements.clear()
+        for lm in landmarks:
+            lm_id = lm.id
+            lm_pos = Vector2(lm.x, lm.y)
+            r = (lm_pos - self.pos).length()
+            if r <= self.lm_range:
+                bearing = math.atan2(lm_pos.y - self.y, lm_pos.x - self.x) - self.theta
+                r_noisy = r + np.random.normal(0, self.sensor_noise_range)
+                b_noisy = normalize_angle(bearing + np.random.normal(0, self.sensor_noise_bearing))
+                self.measurements[lm_id] = (r_noisy, b_noisy)
+
+        # 7) EKF‐SLAM predict & update
+        linear_velocity, angular_velocity = self.calculate_velocities()
+        self._ekf_predict(linear_velocity, angular_velocity, dt)
+        self._ekf_update()
+
+        # 8) (Optional) ghost‐trail visualization
+        if self.draw_ghost and self.mu is not None:
+            est_x, est_y = float(self.mu[0, 0]), float(self.mu[1, 0])
+            self.ghost_trail.append(Vector2(est_x, est_y))
+            if len(self.ghost_trail) > 1000:
+                self.ghost_trail.pop(0)
+
+    def move(self, dt=0.1, obstacles=None, landmarks=None):
+        self.move_2(dt=dt, obstacles=obstacles, landmarks=landmarks)
+        return
+
         # Save current position as the last valid position
         #self.last_valid_x = self.x
         #self.last_valid_y = self.y
@@ -380,7 +458,7 @@ class Robot():
             self.ghost_trail.append(gp)
         if len(self.ghost_trail) > 1000:
             self.ghost_trail.pop(0)
-
+            
         # Calculate velocities from wheel velocities
         linear_velocity, angular_velocity = self.calculate_velocities()
 
@@ -458,57 +536,6 @@ class Robot():
                 
         # return True  # Movement successful
 
-    """
-
-    def move(self, dt: float = 0.1, obstacles: list = None, landmarks: list = None):
-        """
-        Update robot pose via differential drive, simulate measurements,
-        and run EKF-SLAM or Kalman localisation.
-        """
-        v, w = self.calculate_velocities()
-
-        # Predict & Update
-        if self.slam_enabled:
-            if self.mu is None:
-                raise RuntimeError("SLAM not initialized: call initialize_slam() before move().")
-            self._ekf_predict(v, w, dt)
-        else:
-            self.kalman_localisation(v, w, dt)
-
-        # True pose update (for simulation)
-        move_vec = Vector2(
-            v * math.cos(self.theta) * dt,
-            v * math.sin(self.theta) * dt
-        )
-        self.theta = normalize_angle(self.theta + w * dt)
-        if obstacles:
-            move_vec = self.check_collision_vec(obstacles, move_vec)
-
-        self.pos += move_vec
-        self.x, self.y = self.pos.x, self.pos.y
-
-        if self.draw_trail:
-            self.trail.append(self.pos)
-
-        # Generate measurements
-        self.measurements.clear()
-        for lm in landmarks:
-            dx = lm.x - self.x
-            dy = lm.y - self.y
-            r = math.hypot(dx, dy)
-            if r <= self.lm_range:
-                bearing = normalize_angle(math.atan2(dy, dx) - self.theta)
-                r_meas = r + np.random.normal(0, self.sensor_noise_range)
-                b_meas = bearing + np.random.normal(0, self.sensor_noise_bearing)
-                self.measurements[lm.id] = (r_meas, b_meas)
-
-        # Finish update for SLAM or localisation
-        if self.slam_enabled:
-            self._ekf_update()
-        else:
-            # Localization update is inside kalman_localisation already
-            pass
-
     def _ekf_predict(self, v: float, w: float, dt: float):
         """
         EKF prediction: propagate mean and covariance through motion model.
@@ -571,30 +598,6 @@ class Robot():
             mu[2, 0] = normalize_angle(mu[2, 0])
             Sigma = (np.eye(dim) - K.dot(H)).dot(Sigma)
         self.mu, self.Sigma = mu, Sigma
-
-    def kalman_localisation(self, v: float, w: float, dt: float = 0.1):
-        """
-        Use 3-state EKF localization (reusing SLAM prediction/update on pose only).
-        """
-        # Predict
-        mu, Sigma = self.loc_mu.copy(), self.loc_Sigma.copy()
-        theta = mu[2, 0]
-        mu[0, 0] += v * math.cos(theta) * dt
-        mu[1, 0] += v * math.sin(theta) * dt
-        mu[2, 0] = normalize_angle(theta + w * dt)
-        G = np.eye(3)
-        G[0, 2] = -v * math.sin(theta) * dt
-        G[1, 2] = v * math.cos(theta) * dt
-        alpha1, alpha2, alpha3, alpha4 = 0.1, 0.1, 0.1, 0.1
-        R_ctrl = np.array([[alpha1 * v ** 2 + alpha2 * w ** 2, 0], [0, alpha3 * v ** 2 + alpha4 * w ** 2]])
-        V = np.zeros((3, 2));
-        V[0, 0] = math.cos(theta) * dt;
-        V[1, 0] = math.sin(theta) * dt;
-        V[2, 1] = dt
-        Sigma = G.dot(Sigma).dot(G.T) + V.dot(R_ctrl).dot(V.T)
-        # Update (if any measurements available)
-        # For now, just store predicted
-        self.loc_mu, self.loc_Sigma = mu, Sigma
 
     def draw(self, screen):
         # Draw the robot body
