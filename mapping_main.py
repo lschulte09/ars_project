@@ -14,6 +14,7 @@ def main():
         num_landmarks=5,
         draw_kalman=True,  # Enable Kalman filter visualization
         draw_occupancy_grid=True  # Enable occupancy grid mapping
+
     )
     
     running = True

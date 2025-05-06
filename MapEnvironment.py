@@ -52,6 +52,13 @@ class MapEnvironment:
         self.generate_dust(num_dust)
         self.num_landmarks = num_landmarks
         self.generate_landmarks()
+        # SLAM logging setup
+        self.gt_landmarks = [(lm.x, lm.y) for lm in self.landmarks]
+        self.gt_poses = []
+        self.est_poses = []
+        self.est_landmarks_hist = []
+        self.nis_history = []
+        # continue
         self.font = pygame.font.SysFont('Arial', 24)
 
         # Control params
@@ -104,6 +111,8 @@ class MapEnvironment:
         self.robot = Robot(rand_x_robot, rand_y_robot, rand_theta, draw_trail=self.draw_kalman, draw_ghost=self.draw_kalman)
         # Initial sensor update
         self.robot.update_sensors(self.poly_obstacles)
+        if self.robot.slam_enabled:
+            self.robot.initialize_slam(self.num_landmarks)
 
     def handle_input(self, event):
         """
@@ -151,6 +160,21 @@ class MapEnvironment:
             
             # Move the robot
             self.robot.move(dt=0.1, obstacles=self.poly_obstacles, landmarks=self.landmarks)
+            # SLAM logging: ground-truth vs EKF‐SLAM estimate
+            # 1) ground truth
+            self.gt_poses.append((self.robot.x, self.robot.y, self.robot.theta))
+             # 2) EKF‐SLAM estimate
+            if self.robot.slam_enabled and self.robot.mu is not None:
+                mu = self.robot.mu.flatten()
+                # pose
+                self.est_poses.append((mu[0], mu[1], mu[2]))
+                # landmark positions
+                L = (len(mu) - 3) // 2
+                lm_est = [(mu[3 + 2 * i], mu[3 + 2 * i + 1]) for i in range(L)]
+                self.est_landmarks_hist.append(lm_est)
+                # NIS
+                if hasattr(self.robot, 'last_nis'):
+                    self.nis_history.append(self.robot.last_nis)
             
             # Check for dust collection
             for i in range(len(self.dust_particles)):

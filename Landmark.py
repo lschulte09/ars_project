@@ -9,6 +9,7 @@ class Landmark:
         self.y = y
         self.pos = Vector2(self.x, self.y)
         self.sign = signature
+        self.id = signature
 
     def get_pos(self):
         return self.pos

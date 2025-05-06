@@ -75,8 +75,41 @@ def two_landmark_localize(p1, d1, b1, p2, d2, b2):
 
     return pos
 
-class Robot:
-    def __init__(self, x, y, theta, lm_range = 200, sensor_range = 200, draw_trail = False, draw_ghost = False):
+def normalize_angle(angle):
+    """
+    Normalize angle to be within [-pi, pi].
+    """
+    return (angle + math.pi) % (2 * math.pi) - math.pi
+
+def check_collision(self, obstacles, dust_particles):
+    """
+    Check if the robot is colliding with any obstacle.
+    """
+    # Check if any sensor detects an obstacle too close
+    collision_threshold = self.radius + 1  # Add small buffer
+
+    for sensor in self.sensors:
+        if sensor.current_distance < collision_threshold:
+            return True
+
+    # Direct collision detection with obstacles
+    for obstacle in obstacles:
+        # Simple rectangular-circular collision detection
+        # Find closest point on rectangle to circle center
+        closest_x = max(obstacle.x, min(self.x, obstacle.x + obstacle.width))
+        closest_y = max(obstacle.y, min(self.y, obstacle.y + obstacle.height))
+
+        # Calculate distance between closest point and circle center
+        distance = math.sqrt((self.x - closest_x) ** 2 + (self.y - closest_y) ** 2)
+
+        # If distance is less than robot radius, we have a collision
+        if distance < self.radius:
+            return True
+
+    return False
+
+class Robot():
+    def __init__(self, x, y, theta, lm_range=200, sensor_range=200, draw_trail=False, draw_ghost=False, slam_enabled=True):
         self.x = x  # position x-coordinate
         self.y = y  # position y-coordinate
         self.pos = Vector2(x, y)
@@ -84,12 +117,14 @@ class Robot:
         self.v_right = 0.0  # right wheel velocity
         self.radius = 30  # robot radius
         self.wheel_radius = 5.0  # wheel radius - is this ever used?
-        self.wheel_distance = self.radius*2  # distance between wheels
-        self.v = (self.v_right+self.v_left)/2
+        self.wheel_distance = self.radius * 2  # distance between wheels
+        self.v = (self.v_right + self.v_left) / 2
         self.theta = theta  # orientation in radians
         self.max_speed = 30
-        self.eps_dist = 5 # distance sensor noise
-        self.eps_ang = 0.1 # angle sensor noise
+        self.eps_dist = 5  # distance sensor noise
+        self.eps_ang = 0.1  # angle sensor noise
+        self.sensor_noise_range = self.eps_dist
+        self.sensor_noise_bearing = self.eps_ang
         self.move_vec = Vector2(0, 0)
         self.lm_range = lm_range
         self.sensor_range = sensor_range
@@ -113,17 +148,51 @@ class Robot:
                            [0, 2, 0],
                            [0, 0, 0.05]])
         self.pos_est = Vector2(self.pos.x, self.pos.y)
-        
+
         # Create 12 sensors placed every 30 degrees (360°/12)
         self.sensors = [Sensor(np.deg2rad(angle), sensor_range) for angle in range(0, 360, 30)]
-        
+
         # Collision flag
         self.collision = False
-        
+
         # Store last valid position in case of collision
         self.last_valid_x = x
         self.last_valid_y = y
         self.last_valid_theta = theta
+
+        # SLAM
+        self.slam_enabled = slam_enabled
+        self.num_landmarks = 0
+        self.mu = None        # EKF-SLAM state vector
+        self.Sigma = None     # EKF-SLAM covariance matrix
+
+        # Localization-only (Kalman localisation)
+        self.loc_mu = np.array([[x], [y], [theta]])
+        self.loc_Sigma = np.eye(3) * 0.1
+
+        # Visualization
+        self.draw_trail = draw_trail
+        self.trail = []
+        self.draw_ghost = draw_ghost
+        self.ghost_trail = []
+
+        # Storage for latest measurements: {id: (range, bearing)}
+        self.measurements = {}
+
+    def initialize_slam(self, num_landmarks: int):
+        """
+        Initialize the EKF-SLAM state vector and covariance.
+        Must be called after placing the robot and knowing how many landmarks exist.
+        """
+        self.num_landmarks = num_landmarks
+        dim = 3 + 2 * num_landmarks
+        self.mu = np.zeros((dim, 1))
+        self.mu[0, 0] = self.x
+        self.mu[1, 0] = self.y
+        self.mu[2, 0] = self.theta
+        # Large initial uncertainty for landmarks, small for pose
+        self.Sigma = np.eye(dim) * 1e3
+        self.Sigma[0:3, 0:3] = np.eye(3) * 0.1
 
     def kalman_localisation(self, v, w, dt=0.1):
         # A: nxn matrix, identity (no control independent changes)
@@ -273,11 +342,29 @@ class Robot:
         angular_velocity = (self.v_right - self.v_left) / self.wheel_distance
         return linear_velocity, angular_velocity
 
-    def move(self, dt=0.1, obstacles=None, landmarks=None):
-        """
-        Updates the robot's pose using differential drive kinematics.
-        Handles collision detection if obstacles are provided.
-        """
+
+    def get_pose(self):
+        return self.x, self.y, self.theta
+
+    def check_collision_vec(self, obstacles, move_vec):
+        for obstacle in obstacles:
+            points = obstacle.get_points()
+            lines = [[points[i], points[i+1]] for i in range(len(points)-1)]
+            lines.append([points[-1], points[0]])
+            for line in lines:
+                norm, dist = points_line_dist_norm(self.pos, line[0], line[1])
+
+                if dist <= self.radius:
+                    move_vec = move_vec.dot(norm)*norm
+
+        return move_vec
+
+    def add_noise_to_point(self,p):
+        return p + Vector2(np.random.normal(0, self.eps_dist), np.random.normal(0, self.eps_dist))
+
+    """
+        def move(self, dt=0.1, obstacles=None, landmarks=None):
+    
         # Save current position as the last valid position
         #self.last_valid_x = self.x
         #self.last_valid_y = self.y
@@ -287,6 +374,12 @@ class Robot:
             self.trail.append(self.pos)
             if len(self.trail) > 1000:
                 self.trail.pop(0)
+
+        if self.draw_ghost and self.mu is not None:
+            gp = Vector2(float(self.mu[0, 0]), float(self.mu[1, 0]))
+            self.ghost_trail.append(gp)
+        if len(self.ghost_trail) > 1000:
+            self.ghost_trail.pop(0)
 
         # Calculate velocities from wheel velocities
         linear_velocity, angular_velocity = self.calculate_velocities()
@@ -365,25 +458,143 @@ class Robot:
                 
         # return True  # Movement successful
 
-    def get_pose(self):
-        return self.x, self.y, self.theta
+    """
 
-    def check_collision_vec(self, obstacles, move_vec):
-        for obstacle in obstacles:
-            points = obstacle.get_points()
-            lines = [[points[i], points[i+1]] for i in range(len(points)-1)]
-            lines.append([points[-1], points[0]])
-            for line in lines:
-                norm, dist = points_line_dist_norm(self.pos, line[0], line[1])
+    def move(self, dt: float = 0.1, obstacles: list = None, landmarks: list = None):
+        """
+        Update robot pose via differential drive, simulate measurements,
+        and run EKF-SLAM or Kalman localisation.
+        """
+        v, w = self.calculate_velocities()
 
-                if dist <= self.radius:
-                    move_vec = move_vec.dot(norm)*norm
+        # Predict & Update
+        if self.slam_enabled:
+            if self.mu is None:
+                raise RuntimeError("SLAM not initialized: call initialize_slam() before move().")
+            self._ekf_predict(v, w, dt)
+        else:
+            self.kalman_localisation(v, w, dt)
 
-        return move_vec
+        # True pose update (for simulation)
+        move_vec = Vector2(
+            v * math.cos(self.theta) * dt,
+            v * math.sin(self.theta) * dt
+        )
+        self.theta = normalize_angle(self.theta + w * dt)
+        if obstacles:
+            move_vec = self.check_collision_vec(obstacles, move_vec)
 
-    def add_noise_to_point(self,p):
-        return p + Vector2(np.random.normal(0, self.eps_dist), np.random.normal(0, self.eps_dist))
+        self.pos += move_vec
+        self.x, self.y = self.pos.x, self.pos.y
 
+        if self.draw_trail:
+            self.trail.append(self.pos)
+
+        # Generate measurements
+        self.measurements.clear()
+        for lm in landmarks:
+            dx = lm.x - self.x
+            dy = lm.y - self.y
+            r = math.hypot(dx, dy)
+            if r <= self.lm_range:
+                bearing = normalize_angle(math.atan2(dy, dx) - self.theta)
+                r_meas = r + np.random.normal(0, self.sensor_noise_range)
+                b_meas = bearing + np.random.normal(0, self.sensor_noise_bearing)
+                self.measurements[lm.id] = (r_meas, b_meas)
+
+        # Finish update for SLAM or localisation
+        if self.slam_enabled:
+            self._ekf_update()
+        else:
+            # Localization update is inside kalman_localisation already
+            pass
+
+    def _ekf_predict(self, v: float, w: float, dt: float):
+        """
+        EKF prediction: propagate mean and covariance through motion model.
+        """
+        mu, Sigma = self.mu, self.Sigma
+        theta = mu[2, 0]
+        # State prediction
+        mu[0, 0] += v * math.cos(theta) * dt
+        mu[1, 0] += v * math.sin(theta) * dt
+        mu[2, 0] = normalize_angle(theta + w * dt)
+        # Jacobian G
+        dim = mu.shape[0]
+        G = np.eye(dim)
+        G[0, 2] = -v * math.sin(theta) * dt
+        G[1, 2] = v * math.cos(theta) * dt
+        # Control noise
+        alpha1, alpha2, alpha3, alpha4 = 0.1, 0.1, 0.1, 0.1
+        R_control = np.array([[alpha1 * v ** 2 + alpha2 * w ** 2, 0], [0, alpha3 * v ** 2 + alpha4 * w ** 2]])
+        V = np.zeros((dim, 2))
+        V[0, 0] = math.cos(theta) * dt
+        V[1, 0] = math.sin(theta) * dt
+        V[2, 1] = dt
+        Sigma[...] = G.dot(Sigma).dot(G.T) + V.dot(R_control).dot(V.T)
+        self.mu, self.Sigma = mu, Sigma
+
+    def _ekf_update(self):
+        """
+        EKF update: incorporate range-bearing measurements for each observed landmark.
+        """
+        mu, Sigma = self.mu, self.Sigma
+        Q = np.diag([self.sensor_noise_range ** 2, self.sensor_noise_bearing ** 2])
+        dim = mu.shape[0]
+        for lm_id, (r_meas, b_meas) in self.measurements.items():
+            idx = 3 + 2 * lm_id
+            # Initialize landmark if first seen
+            if Sigma[idx, idx] > 1e2:
+                mu[idx, 0] = mu[0, 0] + r_meas * math.cos(b_meas + mu[2, 0])
+                mu[idx + 1, 0] = mu[1, 0] + r_meas * math.sin(b_meas + mu[2, 0])
+            dx = mu[idx, 0] - mu[0, 0];
+            dy = mu[idx + 1, 0] - mu[1, 0]
+            q = dx * dx + dy * dy;
+            sqrt_q = math.sqrt(q)
+            z_hat = np.array([[sqrt_q], [normalize_angle(math.atan2(dy, dx) - mu[2, 0])]])
+            H = np.zeros((2, dim))
+            H[0, 0] = -dx / sqrt_q;
+            H[0, 1] = -dy / sqrt_q
+            H[1, 0] = dy / q;
+            H[1, 1] = -dx / q;
+            H[1, 2] = -1
+            H[0, idx] = dx / sqrt_q;
+            H[0, idx + 1] = dy / sqrt_q
+            H[1, idx] = -dy / q;
+            H[1, idx + 1] = dx / q
+            z = np.array([[r_meas], [normalize_angle(b_meas)]])
+            y = z - z_hat;
+            y[1, 0] = normalize_angle(y[1, 0])
+            S = H.dot(Sigma).dot(H.T) + Q
+            K = Sigma.dot(H.T).dot(np.linalg.inv(S))
+            mu += K.dot(y);
+            mu[2, 0] = normalize_angle(mu[2, 0])
+            Sigma = (np.eye(dim) - K.dot(H)).dot(Sigma)
+        self.mu, self.Sigma = mu, Sigma
+
+    def kalman_localisation(self, v: float, w: float, dt: float = 0.1):
+        """
+        Use 3-state EKF localization (reusing SLAM prediction/update on pose only).
+        """
+        # Predict
+        mu, Sigma = self.loc_mu.copy(), self.loc_Sigma.copy()
+        theta = mu[2, 0]
+        mu[0, 0] += v * math.cos(theta) * dt
+        mu[1, 0] += v * math.sin(theta) * dt
+        mu[2, 0] = normalize_angle(theta + w * dt)
+        G = np.eye(3)
+        G[0, 2] = -v * math.sin(theta) * dt
+        G[1, 2] = v * math.cos(theta) * dt
+        alpha1, alpha2, alpha3, alpha4 = 0.1, 0.1, 0.1, 0.1
+        R_ctrl = np.array([[alpha1 * v ** 2 + alpha2 * w ** 2, 0], [0, alpha3 * v ** 2 + alpha4 * w ** 2]])
+        V = np.zeros((3, 2));
+        V[0, 0] = math.cos(theta) * dt;
+        V[1, 0] = math.sin(theta) * dt;
+        V[2, 1] = dt
+        Sigma = G.dot(Sigma).dot(G.T) + V.dot(R_ctrl).dot(V.T)
+        # Update (if any measurements available)
+        # For now, just store predicted
+        self.loc_mu, self.loc_Sigma = mu, Sigma
 
     def draw(self, screen):
         # Draw the robot body
@@ -461,7 +672,7 @@ class Robot:
         
             sensor_data.append((sensor_angle, sensor.current_distance, hit, endpoint))
     
-        return sensor_data    
+        return sensor_data
 
 
 
