@@ -26,7 +26,7 @@ def generate_polygon(center, radius, num_vertices):
 
 class MapEnvironment:
     def __init__(self, width, height, num_obstacles=5, num_dust=20, num_landmarks=0, 
-                 draw_kalman=False, obstacle_type='poly', draw_occupancy_grid=True):
+                 draw_kalman=False, obstacle_type='poly', draw_occupancy_grid=True, slam_enabled=False):
         self.width = width
         self.height = height
         self.obstacles = []
@@ -53,6 +53,7 @@ class MapEnvironment:
         self.num_landmarks = num_landmarks
         self.generate_landmarks()
         # SLAM logging setup
+        self.slam_enabled = slam_enabled
         self.gt_landmarks = [(lm.x, lm.y) for lm in self.landmarks]
         self.gt_poses = []
         self.est_poses = []
@@ -108,7 +109,7 @@ class MapEnvironment:
         rand_x_robot = random.uniform(50, self.width-50)
         rand_y_robot = random.uniform(50, self.height-50)
         rand_theta = random.uniform(0, 2 * math.pi)
-        self.robot = Robot(rand_x_robot, rand_y_robot, rand_theta, draw_trail=self.draw_kalman, draw_ghost=self.draw_kalman)
+        self.robot = Robot(rand_x_robot, rand_y_robot, rand_theta, draw_trail=self.draw_kalman, draw_ghost=self.draw_kalman, slam_enabled=self.slam_enabled)
         # Initial sensor update
         self.robot.update_sensors(self.poly_obstacles)
         if self.robot.slam_enabled:

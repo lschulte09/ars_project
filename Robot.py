@@ -109,7 +109,7 @@ def check_collision(self, obstacles, dust_particles):
     return False
 
 class Robot():
-    def __init__(self, x, y, theta, lm_range=200, sensor_range=200, draw_trail=False, draw_ghost=False, slam_enabled=True):
+    def __init__(self, x, y, theta, lm_range=200, sensor_range=200, draw_trail=False, draw_ghost=False, slam_enabled=False):
         self.x = x  # position x-coordinate
         self.y = y  # position y-coordinate
         self.pos = Vector2(x, y)
@@ -137,9 +137,6 @@ class Robot():
         self.ghost = None
         self.collided = False
         self.vis_landmarks = {}
-        # init estimate to initial position (assume robot knows where it starts)
-        self.mu = np.array([[self.pos.x], [self.pos.y], [self.theta]])
-        self.Sigma = np.identity(3)
         # Covariance matrix for motion error
         self.R = np.array([[5, 0, 0],
                            [0, 5, 0],
@@ -166,6 +163,11 @@ class Robot():
         self.mu = None        # EKF-SLAM state vector
         self.Sigma = None     # EKF-SLAM covariance matrix
 
+        if not slam_enabled:
+            # give our EKF‐only code a valid 3×1, 3×3
+            self.mu = np.array([[x], [y], [theta]])
+            self.Sigma = np.eye(3) * 0.1
+
         # Localization-only (Kalman localisation)
         self.loc_mu = np.array([[x], [y], [theta]])
         self.loc_Sigma = np.eye(3) * 0.1
@@ -179,20 +181,14 @@ class Robot():
         # Storage for latest measurements: {id: (range, bearing)}
         self.measurements = {}
 
-    def initialize_slam(self, num_landmarks: int):
-        """
-        Initialize the EKF-SLAM state vector and covariance.
-        Must be called after placing the robot and knowing how many landmarks exist.
-        """
+    def initialize_slam(self, num_landmarks):
         self.num_landmarks = num_landmarks
         dim = 3 + 2 * num_landmarks
         self.mu = np.zeros((dim, 1))
-        self.mu[0, 0] = self.x
-        self.mu[1, 0] = self.y
-        self.mu[2, 0] = self.theta
-        # Large initial uncertainty for landmarks, small for pose
+        self.mu[:3, 0] = [self.x, self.y, self.theta]
         self.Sigma = np.eye(dim) * 1e3
-        self.Sigma[0:3, 0:3] = np.eye(3) * 0.1
+        self.Sigma[:3, :3] = np.eye(3) * 0.1
+
 
     def kalman_localisation(self, v, w, dt=0.1):
         # A: nxn matrix, identity (no control independent changes)
@@ -292,6 +288,20 @@ class Robot():
             if len(self.ghost_trail) > 1000:
                 self.ghost_trail.pop(0)
 
+    def simple_localisation(self, v, w, dt=0.1):
+        mu, S = self.loc_mu.copy(), self.loc_Sigma.copy()
+        th = mu[2,0]
+        mu[0,0] += v*math.cos(th)*dt
+        mu[1,0] += v*math.sin(th)*dt
+        mu[2,0]  = normalize_angle(th + w*dt)
+        # predict cov
+        G = np.eye(3)
+        G[0,2], G[1,2] = -v*math.sin(th)*dt, v*math.cos(th)*dt
+        alpha = [0.1]*4
+        R_ctrl = np.array([[alpha[0]*v*v+alpha[1]*w*w,0],[0,alpha[2]*v*v+alpha[3]*w*w]])
+        V = np.zeros((3,2)); V[0,0],V[1,0],V[2,1]=math.cos(th)*dt,math.sin(th)*dt,dt
+        self.loc_mu, self.loc_Sigma = mu, G.dot(S).dot(G.T)+V.dot(R_ctrl).dot(V.T)
+
     def update_sensors(self, obstacles):
         """
         Update all sensor readings for obstacles.
@@ -362,86 +372,69 @@ class Robot():
         return p + Vector2(np.random.normal(0, self.eps_dist), np.random.normal(0, self.eps_dist))
 
     def move_2(self, dt=0.1, obstacles=None, landmarks=None):
-        """
-        One time‐step of true motion + EKF‐SLAM (predict & update),
-        with proper collision handling so the robot stays in bounds.
-        """
-        # 1) True motion update (single integrate)
-        linear_velocity, angular_velocity = self.calculate_velocities()
-        # update heading
-        self.theta = (self.theta - angular_velocity * dt) % (2 * math.pi)
-        # update position
-        self.x += linear_velocity * math.cos(self.theta) * dt
-        self.y += linear_velocity * math.sin(self.theta) * dt
+        # 1. True motion
+        v, w = self.calculate_velocities()
+        self.theta = (self.theta - w * dt) % (2 * math.pi)
+        self.x += v * math.cos(self.theta) * dt
+        self.y += v * math.sin(self.theta) * dt
         self.pos = Vector2(self.x, self.y)
-
-        # 2) Compute intended move vector
+        # 2. Intended move vector
         dir_vec = Vector2(1, 0).rotate_rad(self.theta)
-        self.move_vec = dir_vec * linear_velocity * dt
-
-        # 3) Collision “sliding” against each obstacle
+        self.move_vec = dir_vec * v * dt
+        # 3. Collision sliding + push-out
         new_pos = self.pos + self.move_vec
         if obstacles:
-            # slide along obstacle edges
+            # slide
             for obs in obstacles:
                 pts = obs.get_points()
-                # build list of line‐segments around the polygon
-                lines = [(pts[i], pts[i + 1]) for i in range(len(pts) - 1)]
-                lines.append((pts[-1], pts[0]))
+                lines = [(pts[i], pts[i + 1]) for i in range(len(pts) - 1)] + [(pts[-1], pts[0])]
                 for l1, l2 in lines:
                     norm, dist = points_line_dist_norm(new_pos, l1, l2)
                     if dist <= self.radius:
-                        # project move_vec onto surface normal
                         self.move_vec = self.move_vec.dot(norm) * norm
-            # re‐compute new_pos after sliding
             new_pos = self.pos + self.move_vec
-
-            # backward‐push out of any remaining penetration
+            # push out
             for obs in obstacles:
                 pts = obs.get_points()
-                lines = [(pts[i], pts[i + 1]) for i in range(len(pts) - 1)]
-                lines.append((pts[-1], pts[0]))
+                lines = [(pts[i], pts[i + 1]) for i in range(len(pts) - 1)] + [(pts[-1], pts[0])]
                 for l1, l2 in lines:
                     dist, closest = points_line_dist(new_pos, l1, l2)
                     if dist < self.radius:
-                        # push out along the normal from the closest point
                         push_dir = (new_pos - closest).normalize()
                         new_pos += push_dir * (self.radius - dist)
-
-        # 4) Apply corrected position
+        # 4. Apply
         self.pos = new_pos
         self.x, self.y = new_pos.x, new_pos.y
-
-        # 5) Sensor update on true pose
+        # 5. Sense
         self.update_sensors(obstacles)
-
-        # 6) Build measurement dict for all visible landmarks
+        # 6. Build SLAM measurements
         self.measurements.clear()
-        for lm in landmarks:
-            lm_id = lm.id
-            lm_pos = Vector2(lm.x, lm.y)
-            r = (lm_pos - self.pos).length()
+        for lm in (landmarks or []):
+            r = (Vector2(lm.x, lm.y) - self.pos).length()
             if r <= self.lm_range:
-                bearing = math.atan2(lm_pos.y - self.y, lm_pos.x - self.x) - self.theta
-                r_noisy = r + np.random.normal(0, self.sensor_noise_range)
-                b_noisy = normalize_angle(bearing + np.random.normal(0, self.sensor_noise_bearing))
-                self.measurements[lm_id] = (r_noisy, b_noisy)
-
-        # 7) EKF‐SLAM predict & update
-        linear_velocity, angular_velocity = self.calculate_velocities()
-        self._ekf_predict(linear_velocity, angular_velocity, dt)
-        self._ekf_update()
-
-        # 8) (Optional) ghost‐trail visualization
+                b = math.atan2(lm.y - self.y, lm.x - self.x) - self.theta
+                self.measurements[lm.id] = (
+                    r + np.random.normal(0, self.sensor_noise_range),
+                    normalize_angle(b + np.random.normal(0, self.sensor_noise_bearing))
+                )
+        # 7. EKF-SLAM predict&update
+        if self.slam_enabled:
+            self._ekf_predict(v, w, dt)
+            self._ekf_update()
+        else:
+            # fallback to simple localisation
+            self.simple_localisation(v, w, dt)
+        # 8. Ghost trail
         if self.draw_ghost and self.mu is not None:
-            est_x, est_y = float(self.mu[0, 0]), float(self.mu[1, 0])
-            self.ghost_trail.append(Vector2(est_x, est_y))
+            ex, ey = float(self.mu[0, 0]), float(self.mu[1, 0])
+            self.ghost_trail.append(Vector2(ex, ey))
             if len(self.ghost_trail) > 1000:
                 self.ghost_trail.pop(0)
 
     def move(self, dt=0.1, obstacles=None, landmarks=None):
-        self.move_2(dt=dt, obstacles=obstacles, landmarks=landmarks)
-        return
+        if self.slam_enabled:
+            self.move_2(dt=dt, obstacles=obstacles, landmarks=landmarks)
+            return
 
         # Save current position as the last valid position
         #self.last_valid_x = self.x
