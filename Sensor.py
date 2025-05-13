@@ -29,7 +29,7 @@ class Sensor:
         self.max_range = max_range
         self.current_distance = max_range  # Current reading, initialized to max_range
 
-    def read_distance(self, robot, obstacles, type = 'poly'):
+    def read_distance(self, robot, obstacles, robots = [], type = 'poly'):
         """
         Calculate the distance from the robot to the nearest obstacle in the sensor's direction.
         Returns the distance to the obstacle, or max_range if no obstacle is detected.
@@ -58,6 +58,12 @@ class Sensor:
                 if dist is not None and dist < min_distance:
                     min_distance = dist
 
+        for bot in robots:
+            if bot != robot:
+                dist = self.check_line_circle_intersect(start, bot.pos, bot.radius, sensor_angle)
+                if dist is not None and dist < min_distance:
+                    min_distance = dist
+
         # Update the current distance reading
         self.current_distance = min_distance
         return min_distance
@@ -76,8 +82,32 @@ class Sensor:
             return min_distance
         return None
 
+    def check_line_circle_intersect(self, p, point, rad, angle):
+        end = p + Vector2(math.cos(angle), math.sin(angle)) * self.max_range
+        sens_line = [p, end]
+        d = end - p
+        f = p - point
 
+        a = d.dot(d)
+        b = 2 * f.dot(d)
+        c = f.dot(f) - rad ** 2
 
+        discriminant = b ** 2 - 4 * a * c
+
+        if discriminant < 0:
+            return None  # No intersection
+        else:
+            discriminant = math.sqrt(discriminant)
+            t1 = (-b - discriminant) / (2 * a)
+            t2 = (-b + discriminant) / (2 * a)
+
+            # Check if either intersection point lies along the segment
+            valid_ts = [t for t in (t1, t2) if 0 <= t <= 1]
+            if valid_ts:
+                min_t = min(valid_ts)
+                intersect_point = p + d * min_t
+                return (intersect_point - p).length()
+            return None
 
 
     def _check_rect_intersection(self, x, y, angle, obstacle):

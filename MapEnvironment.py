@@ -124,7 +124,7 @@ class MapEnvironment:
         self.robot = Robot(rand_x_robot, rand_y_robot, rand_theta, draw_trail=self.draw_kalman, draw_ghost=self.draw_kalman, slam_enabled=self.slam_enabled, control='MANUAL')
         self.all_robots.append(self.robot)
         # Initial sensor update
-        self.robot.update_sensors(self.poly_obstacles)
+        self.robot.update_sensors(self.poly_obstacles, self.all_robots)
         if self.robot.slam_enabled:
             self.robot.initialize_slam(self.num_landmarks)
 
@@ -201,7 +201,7 @@ class MapEnvironment:
                     break
             
             # Update sensor readings
-            self.robot.update_sensors(self.poly_obstacles)
+            self.robot.update_sensors(self.poly_obstacles, self.all_robots)
             
             # Update occupancy grid based on sensor readings
             if self.draw_occupancy_grid:

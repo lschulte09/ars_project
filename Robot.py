@@ -304,12 +304,12 @@ class Robot():
         V = np.zeros((3,2)); V[0,0],V[1,0],V[2,1]=math.cos(th)*dt,math.sin(th)*dt,dt
         self.loc_mu, self.loc_Sigma = mu, G.dot(S).dot(G.T)+V.dot(R_ctrl).dot(V.T)
 
-    def update_sensors(self, obstacles):
+    def update_sensors(self, obstacles, robots):
         """
         Update all sensor readings for obstacles.
         """
         for sensor in self.sensors:
-            sensor.read_distance(self, obstacles, type = 'poly')
+            sensor.read_distance(self, obstacles, robots, type = 'poly')
             
     def check_collision(self, obstacles, dust_particles):
         """
@@ -421,11 +421,20 @@ class Robot():
                     if dist < self.radius:
                         push_dir = (new_pos - closest).normalize()
                         new_pos += push_dir * (self.radius - dist)
+
+        if robots:
+            for bot in robots:
+                if bot is self:
+                    continue
+                dist = points_distance(new_pos, bot.pos)
+                if dist < bot.radius + self.radius:
+                    push_dir = (new_pos - bot.pos).normalize()
+                    new_pos += push_dir * (bot.radius + self.radius - dist)
         # 4. Apply
         self.pos = new_pos
         self.x, self.y = new_pos.x, new_pos.y
         # 5. Sense
-        self.update_sensors(obstacles)
+        self.update_sensors(obstacles, robots)
         # 6. Build SLAM measurements
         self.measurements.clear()
         for lm in (landmarks or []):
@@ -522,9 +531,19 @@ class Robot():
                     dir = (new_pos - closest_point).normalize()
                     new_pos = new_pos + dir * diff
 
+        if robots:
+            for bot in robots:
+                if bot is self:
+                    continue
+                dist = points_distance(new_pos, bot.pos)
+                if dist < bot.radius + self.radius:
+                    push_dir = (new_pos - bot.pos).normalize()
+                    new_pos += push_dir * (bot.radius + self.radius - dist)
+
         self.pos = new_pos
         self.x = self.pos.x
         self.y = self.pos.y
+        self.update_sensors(obstacles, robots)
 
 
         if self.type != "RANDOM":
