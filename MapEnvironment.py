@@ -25,7 +25,7 @@ def generate_polygon(center, radius, num_vertices):
     return points
 
 class MapEnvironment:
-    def __init__(self, width, height, num_obstacles=5, num_dust=20, num_landmarks=0, 
+    def __init__(self, width, height, num_obstacles=5, num_dust=20, num_landmarks=0, random_bots = 0,
                  draw_kalman=False, obstacle_type='poly', draw_occupancy_grid=True, slam_enabled=False):
         self.width = width
         self.height = height
@@ -36,6 +36,9 @@ class MapEnvironment:
         self.obstacles_boundary = [Obstacle(self.boundary.x, self.boundary.y, self.boundary.width, self.boundary.height)]
         self.poly_obstacles = [PolyObstacle(self.boundary.get_points())]
         self.robot = None
+        self.num_random_bots = random_bots
+        self.random_bots = []
+        self.all_robots = []
         self.draw_kalman = draw_kalman
         self.draw_occupancy_grid = draw_occupancy_grid
         self.screen = pygame.display.set_mode((self.width, self.height))
@@ -105,11 +108,21 @@ class MapEnvironment:
             y = random.uniform(0, self.height)
             self.dust_particles.append(DustParticle(x, y, width=4, height=4))
 
+    def place_bots(self):
+        for _ in range(self.num_random_bots):
+            rand_x_robot = random.uniform(50, self.width-50)
+            rand_y_robot = random.uniform(50, self.height-50)
+            rand_theta = random.uniform(0, 2 * math.pi)
+            self.random_bots.append(Robot(rand_x_robot, rand_y_robot, rand_theta, draw_trail=False, draw_ghost=False, slam_enabled=False, control='RANDOM'))
+            self.all_robots.append(self.random_bots[-1])
+
+
     def place_robot(self):
         rand_x_robot = random.uniform(50, self.width-50)
         rand_y_robot = random.uniform(50, self.height-50)
         rand_theta = random.uniform(0, 2 * math.pi)
-        self.robot = Robot(rand_x_robot, rand_y_robot, rand_theta, draw_trail=self.draw_kalman, draw_ghost=self.draw_kalman, slam_enabled=self.slam_enabled)
+        self.robot = Robot(rand_x_robot, rand_y_robot, rand_theta, draw_trail=self.draw_kalman, draw_ghost=self.draw_kalman, slam_enabled=self.slam_enabled, control='MANUAL')
+        self.all_robots.append(self.robot)
         # Initial sensor update
         self.robot.update_sensors(self.poly_obstacles)
         if self.robot.slam_enabled:
@@ -160,7 +173,8 @@ class MapEnvironment:
             underlying_square_length = self.robot.radius * 1.41
             
             # Move the robot
-            self.robot.move(dt=0.1, obstacles=self.poly_obstacles, landmarks=self.landmarks)
+            self.robot.move(dt=0.1, obstacles=self.poly_obstacles, landmarks=self.landmarks, robots=self.all_robots)
+
             # SLAM logging: ground-truth vs EKF‐SLAM estimate
             # 1) ground truth
             self.gt_poses.append((self.robot.x, self.robot.y, self.robot.theta))
@@ -193,6 +207,14 @@ class MapEnvironment:
             if self.draw_occupancy_grid:
                 self.occupancy_grid.update_from_sensors(self.robot)
 
+        if self.random_bots:
+            for bot in self.random_bots:
+                bot.move(dt=0.1, obstacles=self.poly_obstacles, landmarks=self.landmarks, robots=self.all_robots)
+
+    def update_bot_controls(self):
+        for bot in self.random_bots:
+            bot.random_move()
+
     def draw_screen(self):
         self.screen.fill('gray')
 
@@ -211,8 +233,11 @@ class MapEnvironment:
             dust.draw(self.screen)
 
         # Draw robot
-        if self.robot:
-            self.robot.draw(self.screen)
+        # if self.robot:
+        #     self.robot.draw(self.screen)
+
+        for bot in self.all_robots:
+            bot.draw(self.screen)
 
         for landmark in self.landmarks:
             landmark.draw(self.screen, self.robot)

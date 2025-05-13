@@ -12,18 +12,25 @@ def main():
         num_obstacles=8,
         num_dust=15,
         num_landmarks=5,
+        random_bots=2,
         draw_kalman=True,  # Enable Kalman filter visualization
-        draw_occupancy_grid=True  # Enable occupancy grid mapping
-        ,slam_enabled=False
+        draw_occupancy_grid=True,  # Enable occupancy grid mapping
+        slam_enabled=True
     )
     
     running = True
     env.place_robot()
+    env.place_bots()
+    env.update_bot_controls()
     
     # For map saving functionality
     map_saved = False
-    
+
     while running:
+
+        if pygame.time.get_ticks() % 3000 == 0:
+            env.update_bot_controls()
+
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False

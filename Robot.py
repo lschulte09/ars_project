@@ -109,7 +109,7 @@ def check_collision(self, obstacles, dust_particles):
     return False
 
 class Robot():
-    def __init__(self, x, y, theta, lm_range=200, sensor_range=200, draw_trail=False, draw_ghost=False, slam_enabled=False):
+    def __init__(self, x, y, theta, lm_range=200, sensor_range=200, draw_trail=False, draw_ghost=False, slam_enabled=False, control = 'MANUAL'):
         self.x = x  # position x-coordinate
         self.y = y  # position y-coordinate
         self.pos = Vector2(x, y)
@@ -136,11 +136,13 @@ class Robot():
                 self.ghost_trail = []
         self.ghost = None
         self.collided = False
+        # control should be either "MANUAL", "RANDOM", or "AUTO"
+        self.type = control
         self.vis_landmarks = {}
         # Covariance matrix for motion error
-        self.R = np.array([[5, 0, 0],
-                           [0, 5, 0],
-                           [0, 0, 0.2]])
+        self.R = np.array([[10, 0, 0],
+                           [0, 10, 0],
+                           [0, 0, 1]])
         self.Q = np.array([[2, 0, 0],
                            [0, 2, 0],
                            [0, 0, 0.05]])
@@ -293,7 +295,7 @@ class Robot():
         th = mu[2,0]
         mu[0,0] += v*math.cos(th)*dt
         mu[1,0] += v*math.sin(th)*dt
-        mu[2,0]  = normalize_angle(th + w*dt)
+        mu[2,0]  = normalize_angle(th - w*dt)
         # predict cov
         G = np.eye(3)
         G[0,2], G[1,2] = -v*math.sin(th)*dt, v*math.cos(th)*dt
@@ -342,7 +344,15 @@ class Robot():
         """
         self.v_left = v_left
         self.v_right = v_right
-    
+
+    def random_move(self):
+        """
+        Move the robot with random wheel velocities.
+        """
+        l_vel = random.uniform(-self.max_speed, self.max_speed)
+        r_vel = int(np.random.normal(l_vel, 10))
+        self.set_wheel_velocities(l_vel, r_vel)
+
     def calculate_velocities(self):
         """
         Calculate linear and angular velocities from wheel velocities.
@@ -371,7 +381,7 @@ class Robot():
     def add_noise_to_point(self,p):
         return p + Vector2(np.random.normal(0, self.eps_dist), np.random.normal(0, self.eps_dist))
 
-    def move_2(self, dt=0.1, obstacles=None, landmarks=None):
+    def move_2(self, dt=0.1, obstacles=None, landmarks=None, robots=None):
         # 1. True motion
         v, w = self.calculate_velocities()
         self.theta = (self.theta - w * dt) % (2 * math.pi)
@@ -392,8 +402,17 @@ class Robot():
                     norm, dist = points_line_dist_norm(new_pos, l1, l2)
                     if dist <= self.radius:
                         self.move_vec = self.move_vec.dot(norm) * norm
+        if robots:
+            for bot in robots:
+                if bot is self:
+                    continue
+                if points_distance(new_pos, bot.pos) <= bot.radius + self.radius:
+                    offset_norm = (bot.pos - self.pos).normalize()
+                    tangent = Vector2(-offset_norm.y, offset_norm.x)
+                    self.move_vec = self.move_vec.dot(tangent) * tangent
             new_pos = self.pos + self.move_vec
-            # push out
+        # push out
+        if obstacles:
             for obs in obstacles:
                 pts = obs.get_points()
                 lines = [(pts[i], pts[i + 1]) for i in range(len(pts) - 1)] + [(pts[-1], pts[0])]
@@ -431,9 +450,9 @@ class Robot():
             if len(self.ghost_trail) > 1000:
                 self.ghost_trail.pop(0)
 
-    def move(self, dt=0.1, obstacles=None, landmarks=None):
+    def move(self, dt=0.1, obstacles=None, landmarks=None, robots=None):
         if self.slam_enabled:
-            self.move_2(dt=dt, obstacles=obstacles, landmarks=landmarks)
+            self.move_2(dt=dt, obstacles=obstacles, landmarks=landmarks, robots=robots)
             return
 
         # Save current position as the last valid position
@@ -477,11 +496,17 @@ class Robot():
             lines.append([points[-1], points[0]])
             for line in lines:
                 norm, dist = points_line_dist_norm(new_pos, line[0], line[1])
-
                 if dist <= self.radius:
                     self.move_vec = self.move_vec.dot(norm) * norm
+        for bot in robots:
+            if bot is self:
+                continue
+            if points_distance(new_pos, bot.pos) <= bot.radius + self.radius:
+                offset_norm = (bot.pos - self.pos).normalize()
+                tangent = Vector2(-offset_norm.y, offset_norm.x)
+                self.move_vec = self.move_vec.dot(tangent) * tangent
 
-        # self.move_vec = check_collision_vec(obstacles)
+        # update new position
         new_pos = self.pos + self.move_vec
 
         # backwards check for illegal move, "bump out of wall"
@@ -501,33 +526,18 @@ class Robot():
         self.x = self.pos.x
         self.y = self.pos.y
 
-        self.vis_landmarks = {}
-        for landmark in landmarks:
-            lm_pos = landmark.get_pos()
-            lm_dist = points_distance(self.pos, lm_pos)
-            if lm_dist < self.lm_range:
-                r_vec = (lm_pos - self.pos).normalize()
-                bearing = math.radians(dir_vec.angle_to(r_vec))
-                self.vis_landmarks[tuple(landmark.pos)] = [lm_dist, bearing]
 
-        self.kalman_localisation(linear_velocity, angular_velocity)
+        if self.type != "RANDOM":
+            self.vis_landmarks = {}
+            for landmark in landmarks:
+                lm_pos = landmark.get_pos()
+                lm_dist = points_distance(self.pos, lm_pos)
+                if lm_dist < self.lm_range:
+                    r_vec = (lm_pos - self.pos).normalize()
+                    bearing = math.radians(dir_vec.angle_to(r_vec))
+                    self.vis_landmarks[tuple(landmark.pos)] = [lm_dist, bearing]
 
-
-
-        # Check for collisions if obstacles are provided
-        # need to implement sliding, use vector2 maybe
-        # if obstacles:
-        #     if self.check_collision(obstacles):
-        #         # Collision detected, revert to last valid position
-        #         self.x = self.last_valid_x
-        #         self.y = self.last_valid_y
-        #         self.theta = self.last_valid_theta
-        #         self.collision = True
-        #         return False  # Movement failed due to collision
-        #     else:
-        #         self.collision = False
-                
-        # return True  # Movement successful
+            self.kalman_localisation(linear_velocity, angular_velocity)
 
     def _ekf_predict(self, v: float, w: float, dt: float):
         """
@@ -538,7 +548,7 @@ class Robot():
         # State prediction
         mu[0, 0] += v * math.cos(theta) * dt
         mu[1, 0] += v * math.sin(theta) * dt
-        mu[2, 0] = normalize_angle(theta + w * dt)
+        mu[2, 0] = normalize_angle(theta - w * dt)
         # Jacobian G
         dim = mu.shape[0]
         G = np.eye(dim)
@@ -546,7 +556,8 @@ class Robot():
         G[1, 2] = v * math.cos(theta) * dt
         # Control noise
         alpha1, alpha2, alpha3, alpha4 = 0.1, 0.1, 0.1, 0.1
-        R_control = np.array([[alpha1 * v ** 2 + alpha2 * w ** 2, 0], [0, alpha3 * v ** 2 + alpha4 * w ** 2]])
+        R_control = np.array([[alpha1 * v ** 2 + alpha2 * w ** 2, 0],
+                              [0, alpha3 * v ** 2 + alpha4 * w ** 2]])
         V = np.zeros((dim, 2))
         V[0, 0] = math.cos(theta) * dt
         V[1, 0] = math.sin(theta) * dt
@@ -601,60 +612,61 @@ class Robot():
         line_y = self.y + self.radius * math.sin(self.theta)
         line_end = self.pos + Vector2(self.radius, 0).rotate_rad(self.theta)
         pygame.draw.line(screen, (0, 0, 0), self.pos, line_end, 3)
-        
-        # Draw sensors
-        for i, sensor in enumerate(self.sensors):
-            sensor.draw(screen, self)
-            
-            # Draw sensor number at the end point
-            if sensor.current_distance > self.radius:  # Only if sensor ray extends beyond robot body
-                # Calculate position for the sensor number
-                sensor_angle = self.theta + sensor.relative_angle
-                text_x = self.x + (self.radius + 15) * math.cos(sensor_angle)
-                text_y = self.y + (self.radius + 15) * math.sin(sensor_angle)
-                
-                # Render the sensor number
-                font = pygame.font.SysFont(None, 20)
-                text = font.render(str(int(sensor.current_distance)), True, (0, 0, 255))
-                screen.blit(text, (int(text_x), int(text_y)))
 
-        if self.draw_trail:
-            for i in self.trail:
-                pygame.draw.circle(screen, (0, 0, 0), (int(i[0]), int(i[1])), 1)
+        if self.type != 'RANDOM':
+            # Draw sensors
+            for i, sensor in enumerate(self.sensors):
+                sensor.draw(screen, self)
 
+                # Draw sensor number at the end point
+                if sensor.current_distance > self.radius:  # Only if sensor ray extends beyond robot body
+                    # Calculate position for the sensor number
+                    sensor_angle = self.theta + sensor.relative_angle
+                    text_x = self.x + (self.radius + 15) * math.cos(sensor_angle)
+                    text_y = self.y + (self.radius + 15) * math.sin(sensor_angle)
 
-        if self.draw_ghost:
-            ghost_pos = Vector2(float(self.mu[0, 0]), float(self.mu[1, 0]))
-            ghost_theta = self.mu[2, 0]
-            pygame.draw.circle(screen, (0, 0, 255), ghost_pos, self.radius, 2)
-
-            # Draw a line indicating the robot's orientation
-            line_end = ghost_pos + Vector2(self.radius, 0).rotate_rad(-ghost_theta)
-            pygame.draw.line(screen, (0, 0, 255), ghost_pos, line_end, 3)
-
-            pos_cov = self.Sigma[:2, :2]
-            eigenvalues, eigenvectors = LA.eig(pos_cov)
-            order = eigenvalues.argsort()[::-1]
-            eigenvalues = eigenvalues[order]
-            eigenvectors = eigenvectors[:, order]
-
-            angle = math.atan2(eigenvectors[1, 0], eigenvectors[0, 0])  # Orientation of ellipse
-            angle_deg = math.degrees(angle)
-
-            std_devs = 2.0 * np.sqrt(eigenvalues)  # 2-sigma ellipse
-            ellipse_width = std_devs[0] * 2
-            ellipse_height = std_devs[1] * 2
-            ellipse_surf = pygame.Surface((ellipse_width, ellipse_height), pygame.SRCALPHA)
-            pygame.draw.ellipse(ellipse_surf, (0, 0, 255, 50), (0, 0, ellipse_width, ellipse_height))
-
-            rotated_ellipse = pygame.transform.rotate(ellipse_surf, -angle_deg)  # Pygame uses clockwise rotation
-            ellipse_rect = rotated_ellipse.get_rect(center=(ghost_pos.x, ghost_pos.y))
-
-            screen.blit(rotated_ellipse, ellipse_rect)
+                    # Render the sensor number
+                    font = pygame.font.SysFont(None, 20)
+                    text = font.render(str(int(sensor.current_distance)), True, (0, 0, 255))
+                    screen.blit(text, (int(text_x), int(text_y)))
 
             if self.draw_trail:
-                for i in self.ghost_trail:
-                    pygame.draw.circle(screen, (0, 0, 255), (int(i[0]), int(i[1])), 1)
+                for i in self.trail:
+                    pygame.draw.circle(screen, (0, 0, 0), (int(i[0]), int(i[1])), 1)
+
+
+            if self.draw_ghost:
+                ghost_pos = Vector2(float(self.mu[0, 0]), float(self.mu[1, 0]))
+                ghost_theta = self.mu[2, 0]
+                pygame.draw.circle(screen, (0, 0, 255), ghost_pos, self.radius, 2)
+
+                # Draw a line indicating the robot's orientation
+                line_end = ghost_pos + Vector2(self.radius, 0).rotate_rad(-ghost_theta)
+                pygame.draw.line(screen, (0, 0, 255), ghost_pos, line_end, 3)
+
+                pos_cov = self.Sigma[:2, :2]
+                eigenvalues, eigenvectors = LA.eig(pos_cov)
+                order = eigenvalues.argsort()[::-1]
+                eigenvalues = eigenvalues[order]
+                eigenvectors = eigenvectors[:, order]
+
+                angle = math.atan2(eigenvectors[1, 0], eigenvectors[0, 0])  # Orientation of ellipse
+                angle_deg = math.degrees(angle)
+
+                std_devs = 2.0 * np.sqrt(eigenvalues)  # 2-sigma ellipse
+                ellipse_width = std_devs[0] * 2
+                ellipse_height = std_devs[1] * 2
+                ellipse_surf = pygame.Surface((ellipse_width, ellipse_height), pygame.SRCALPHA)
+                pygame.draw.ellipse(ellipse_surf, (0, 0, 255, 50), (0, 0, ellipse_width, ellipse_height))
+
+                rotated_ellipse = pygame.transform.rotate(ellipse_surf, -angle_deg)  # Pygame uses clockwise rotation
+                ellipse_rect = rotated_ellipse.get_rect(center=(ghost_pos.x, ghost_pos.y))
+
+                screen.blit(rotated_ellipse, ellipse_rect)
+
+                if self.draw_trail:
+                    for i in self.ghost_trail:
+                        pygame.draw.circle(screen, (0, 0, 255), (int(i[0]), int(i[1])), 1)
 
     def get_sensor_data(self):
         sensor_data = []
