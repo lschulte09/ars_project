@@ -9,9 +9,10 @@ def main():
     # Create environment with occupancy grid mapping enabled
     env = MapEnvironment(
         1280, 720,
-        num_obstacles=8,
-        num_landmarks=5,
+        num_obstacles=15,
+        num_landmarks=7,
         random_bots=0,
+        max_obstacle_size= 100,
         draw_kalman=True,  # Enable Kalman filter visualization
         draw_occupancy_grid=True,  # Enable occupancy grid mapping
         slam_enabled=True,
@@ -50,6 +51,7 @@ def main():
 
                 # Save environment with B key
                 if event.key == pygame.K_b:
+                    print("Saving environment...")
                     env.save_env("maps")
         
         # Update the environment

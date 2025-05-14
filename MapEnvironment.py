@@ -28,13 +28,15 @@ def generate_polygon(center, radius, num_vertices):
 
 class MapEnvironment:
     def __init__(self, width, height, num_obstacles=5, max_obstacle_size=100, num_landmarks=0, random_bots = 0,
-                 draw_kalman=False, obstacle_type='poly', draw_occupancy_grid=True, slam_enabled=False, make_dust = False):
+                 draw_kalman=False, obstacle_type='poly', draw_occupancy_grid=True, slam_enabled=False, make_dust = False,
+                 landmark_dist = 'even'):
         self.width = width
         self.height = height
         self.obstacles = []
         self.dust_particles = []
         self.dust_collected = 0
         self.landmarks = []
+        self.landmark_dist = landmark_dist
         self.boundary = Boundary(self.width, self.height, 20)
         self.obstacles_boundary = [Obstacle(self.boundary.x, self.boundary.y, self.boundary.width, self.boundary.height)]
         self.poly_obstacles = [PolyObstacle(self.boundary.get_points())]
@@ -102,11 +104,28 @@ class MapEnvironment:
             self.poly_obstacles.append(obs)
 
     def generate_landmarks(self):
-        for i in range(self.num_landmarks):
-            x = random.uniform(0, self.width)
-            y = random.uniform(0, self.height)
-            # numerate landmarks for signatures
-            self.landmarks.append(Landmark(x, y, i))
+        if self.landmark_dist == 'random':
+            for i in range(self.num_landmarks):
+                x = random.uniform(0, self.width)
+                y = random.uniform(0, self.height)
+                # numerate landmarks for signatures
+                self.landmarks.append(Landmark(x, y, i))
+        if self.landmark_dist == 'even':
+            grid_size = math.ceil(math.sqrt(self.num_landmarks))
+            cell_width = self.width / grid_size
+            cell_height = self.height / grid_size
+
+            idx = 0
+            for row in range(grid_size):
+                for col in range(grid_size):
+                    if idx >= self.num_landmarks:
+                        return
+                    # Random point within the cell
+                    x = random.uniform(col * cell_width, (col + 1) * cell_width)
+                    y = random.uniform(row * cell_height, (row + 1) * cell_height)
+                    self.landmarks.append(Landmark(x, y, idx))
+                    idx += 1
+
 
     def generate_dust(self):
         for x in range(int(self.boundary.x), int(self.boundary.x + self.boundary.width), int(self.dust_density)):

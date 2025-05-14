@@ -153,11 +153,8 @@ class Robot:
 
         # Collision flag
         self.collision = False
-
-        # Store last valid position in case of collision
-        self.last_valid_x = x
-        self.last_valid_y = y
-        self.last_valid_theta = theta
+        self.obs_collisions = 0
+        self.bot_collisions = 0
 
         # SLAM
         self.slam_enabled = slam_enabled
@@ -310,33 +307,6 @@ class Robot:
         """
         for sensor in self.sensors:
             sensor.read_distance(self, obstacles, robots, type = 'poly')
-            
-    def check_collision(self, obstacles, dust_particles):
-        """
-        Check if the robot is colliding with any obstacle.
-        """
-        # Check if any sensor detects an obstacle too close
-        collision_threshold = self.radius + 1  # Add small buffer
-        
-        for sensor in self.sensors:
-            if sensor.current_distance < collision_threshold:
-                return True
-                
-        # Direct collision detection with obstacles
-        for obstacle in obstacles:
-            # Simple rectangular-circular collision detection
-            # Find closest point on rectangle to circle center
-            closest_x = max(obstacle.x, min(self.x, obstacle.x + obstacle.width))
-            closest_y = max(obstacle.y, min(self.y, obstacle.y + obstacle.height))
-            
-            # Calculate distance between closest point and circle center
-            distance = math.sqrt((self.x - closest_x)**2 + (self.y - closest_y)**2)
-            
-            # If distance is less than robot radius, we have a collision
-            if distance < self.radius:
-                return True
-                
-        return False
     
     def set_wheel_velocities(self, v_left, v_right):
         """
@@ -401,12 +371,14 @@ class Robot:
                 for l1, l2 in lines:
                     norm, dist = points_line_dist_norm(new_pos, l1, l2)
                     if dist <= self.radius:
+                        self.obs_collisions += 1
                         self.move_vec = self.move_vec.dot(norm) * norm
         if robots:
             for bot in robots:
                 if bot is self:
                     continue
                 if points_distance(new_pos, bot.pos) <= bot.radius + self.radius:
+                    self.bots_collision += 1
                     offset_norm = (bot.pos - self.pos).normalize()
                     tangent = Vector2(-offset_norm.y, offset_norm.x)
                     self.move_vec = self.move_vec.dot(tangent) * tangent
@@ -506,11 +478,13 @@ class Robot:
             for line in lines:
                 norm, dist = points_line_dist_norm(new_pos, line[0], line[1])
                 if dist <= self.radius:
+                    self.obs_collisions += 1
                     self.move_vec = self.move_vec.dot(norm) * norm
         for bot in robots:
             if bot is self:
                 continue
             if points_distance(new_pos, bot.pos) <= bot.radius + self.radius:
+                self.bot_collisions += 1
                 offset_norm = (bot.pos - self.pos).normalize()
                 tangent = Vector2(-offset_norm.y, offset_norm.x)
                 self.move_vec = self.move_vec.dot(tangent) * tangent
