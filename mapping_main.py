@@ -11,7 +11,7 @@ def main():
         1280, 720,
         num_obstacles=8,
         num_landmarks=5,
-        random_bots=2,
+        random_bots=0,
         draw_kalman=True,  # Enable Kalman filter visualization
         draw_occupancy_grid=True,  # Enable occupancy grid mapping
         slam_enabled=True,
@@ -47,6 +47,10 @@ def main():
                 # Show map plot with P key
                 if event.key == pygame.K_o:
                     env.plot_map()
+
+                # Save environment with B key
+                if event.key == pygame.K_b:
+                    env.save_env("maps")
         
         # Update the environment
         env.update()

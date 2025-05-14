@@ -1,9 +1,11 @@
 import math
+import os
+import pickle
 import random
 import numpy as np
 import matplotlib.pyplot as plt
 import pygame
-from matplotlib.patches import Rectangle, Circle
+import json
 from pygame.math import Vector2
 from Boundary import Boundary
 from DustParticle import DustParticle
@@ -25,7 +27,7 @@ def generate_polygon(center, radius, num_vertices):
     return points
 
 class MapEnvironment:
-    def __init__(self, width, height, num_obstacles=5, num_landmarks=0, random_bots = 0,
+    def __init__(self, width, height, num_obstacles=5, max_obstacle_size=100, num_landmarks=0, random_bots = 0,
                  draw_kalman=False, obstacle_type='poly', draw_occupancy_grid=True, slam_enabled=False, make_dust = False):
         self.width = width
         self.height = height
@@ -48,7 +50,8 @@ class MapEnvironment:
         # Create occupancy grid
         self.grid_resolution = 10  # pixels per cell
         self.occupancy_grid = OccupancyGrid(self.width, self.height, self.grid_resolution)
-        
+
+        self.obstacle_magnitude = max_obstacle_size
         if obstacle_type == 'rect':
             self.generate_obstacles(num_obstacles)
         if obstacle_type == 'poly':
@@ -91,7 +94,7 @@ class MapEnvironment:
     def generate_poly_obstacles(self, num):
         for _ in range(num):
             pos = Vector2(random.uniform(0, self.width), random.uniform(0, self.height))
-            radius = int(random.uniform(40, 100))
+            radius = int(random.uniform(40, self.obstacle_magnitude))
             n_vert = int(random.uniform(3, 8))
             points = generate_polygon(pos, radius, n_vert)
             obs = PolyObstacle(points)
@@ -106,8 +109,8 @@ class MapEnvironment:
             self.landmarks.append(Landmark(x, y, i))
 
     def generate_dust(self):
-        for x in range(self.boundary.x, self.boundary.x + self.boundary.width, self.dust_density):
-            for y in range(self.boundary.y, self.boundary.y + self.boundary.height, self.dust_density):
+        for x in range(int(self.boundary.x), int(self.boundary.x + self.boundary.width), int(self.dust_density)):
+            for y in range(int(self.boundary.y), int(self.boundary.y + self.boundary.height), int(self.dust_density)):
                 self.dust_particles.append(DustParticle(x, y))
 
     def collect_dust(self):
@@ -286,39 +289,37 @@ class MapEnvironment:
         plt.colorbar(label='Occupancy (0=free, 1=occupied)')
         plt.show()
 
-    def plot(self):
-        plt.figure(figsize=(8, 8))
-        ax = plt.gca()
+    def save_env(self, directory):
+        """Save the environment to a directory"""
+        if not os.path.exists(directory):
+            os.makedirs(directory)
 
-        # Draw obstacles as rectangles
-        for obs in self.obstacles:
-            rect = Rectangle((obs.x, obs.y), obs.width, obs.height, color='gray')
-            ax.add_patch(rect)
+        data = {
+            'width': self.width,
+            'height': self.height,
+            'boundary': self.boundary,
+            'poly_obstacles': self.poly_obstacles,
+            'landmarks': self.landmarks,
+            'all_robots': self.all_robots,
+            'random_bots': self.random_bots,
+            'robot': self.robot,
+            'dust_particles': self.dust_particles
+        }
 
-        # Draw dust particles as yellow dots
-        for dust in self.dust_particles:
-            plt.plot(dust.x, dust.y, 'yo', markersize=5)
+        with open(os.path.join(directory, f'environment_{random.randint(0, 1000)}.pkl'), 'wb') as f:
+            pickle.dump(data, f)
 
-        # Draw the robot (if placed) as a blue circle with an arrow showing orientation.
-        if self.robot:
-            # Robot body as a circle
-            robot_circle = Circle((self.robot.x, self.robot.y), self.robot.radius, fc='red', ec='black')
-            ax.add_patch(robot_circle)
-            
-            # Draw an arrow indicating the heading direction
-            dx = self.robot.radius * np.cos(self.robot.theta)
-            dy = self.robot.radius * np.sin(self.robot.theta)
-            plt.arrow(self.robot.x, self.robot.y, dx, dy, head_width=5, head_length=10, fc='black', ec='black')
-            
-            # Draw sensor rays
-            for sensor in self.robot.sensors:
-                end_x, end_y = sensor.get_end_point(self.robot)
-                plt.plot([self.robot.x, end_x], [self.robot.y, end_y], 'g-', linewidth=1)
+    def load_env(self, filename):
+        """Load the environment from a file"""
+        with open(filename, 'rb') as f:
+            data = pickle.load(f)
 
-        plt.xlim(0, self.width)
-        plt.ylim(0, self.height)
-        plt.title('Simulated Environment')
-        plt.xlabel('X coordinate')
-        plt.ylabel('Y coordinate')
-        plt.grid(True)
-        plt.show()
+        self.width = data['width']
+        self.height = data['height']
+        self.boundary = data['boundary']
+        self.poly_obstacles = data['poly_obstacles']
+        self.landmarks = data['landmarks']
+        self.all_robots = data['all_robots']
+        self.random_bots = data['random_bots']
+        self.robot = data['robot']
+        self.dust_particles = data['dust_particles']

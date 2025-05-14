@@ -8,8 +8,8 @@ class Boundary:
                        Vector2(screen_width - offset, offset),
                        Vector2(screen_width - offset, screen_height - offset),
                        Vector2(offset, screen_height - offset)]
-        self.x = offset
-        self.y = offset
+        self.x = self.points[0].x
+        self.y = self.points[0].y
         self.width = screen_width - 2*offset
         self.height = screen_height - 2*offset
 
