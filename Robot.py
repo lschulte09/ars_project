@@ -573,7 +573,7 @@ class Robot():
         G = np.eye(dim)
         G[0, 2] = -v * math.sin(theta) * dt
         G[1, 2] = v * math.cos(theta) * dt
-        # Control noise
+        # Control noise, a1, 3 are for speed, a2, 4 are for angle
         alpha1, alpha2, alpha3, alpha4 = 0.1, 0.1, 0.1, 0.1
         R_control = np.array([[alpha1 * v ** 2 + alpha2 * w ** 2, 0],
                               [0, alpha3 * v ** 2 + alpha4 * w ** 2]])
@@ -597,27 +597,27 @@ class Robot():
             if Sigma[idx, idx] > 1e2:
                 mu[idx, 0] = mu[0, 0] + r_meas * math.cos(b_meas + mu[2, 0])
                 mu[idx + 1, 0] = mu[1, 0] + r_meas * math.sin(b_meas + mu[2, 0])
-            dx = mu[idx, 0] - mu[0, 0];
+            dx = mu[idx, 0] - mu[0, 0]
             dy = mu[idx + 1, 0] - mu[1, 0]
-            q = dx * dx + dy * dy;
+            q = dx * dx + dy * dy
             sqrt_q = math.sqrt(q)
             z_hat = np.array([[sqrt_q], [normalize_angle(math.atan2(dy, dx) - mu[2, 0])]])
             H = np.zeros((2, dim))
-            H[0, 0] = -dx / sqrt_q;
+            H[0, 0] = -dx / sqrt_q
             H[0, 1] = -dy / sqrt_q
-            H[1, 0] = dy / q;
-            H[1, 1] = -dx / q;
+            H[1, 0] = dy / q
+            H[1, 1] = -dx / q
             H[1, 2] = -1
-            H[0, idx] = dx / sqrt_q;
+            H[0, idx] = dx / sqrt_q
             H[0, idx + 1] = dy / sqrt_q
-            H[1, idx] = -dy / q;
+            H[1, idx] = -dy / q
             H[1, idx + 1] = dx / q
             z = np.array([[r_meas], [normalize_angle(b_meas)]])
-            y = z - z_hat;
+            y = z - z_hat
             y[1, 0] = normalize_angle(y[1, 0])
             S = H.dot(Sigma).dot(H.T) + Q
             K = Sigma.dot(H.T).dot(np.linalg.inv(S))
-            mu += K.dot(y);
+            mu += K.dot(y)
             mu[2, 0] = normalize_angle(mu[2, 0])
             Sigma = (np.eye(dim) - K.dot(H)).dot(Sigma)
         self.mu, self.Sigma = mu, Sigma
