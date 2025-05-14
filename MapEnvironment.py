@@ -25,12 +25,13 @@ def generate_polygon(center, radius, num_vertices):
     return points
 
 class MapEnvironment:
-    def __init__(self, width, height, num_obstacles=5, num_dust=20, num_landmarks=0, random_bots = 0,
-                 draw_kalman=False, obstacle_type='poly', draw_occupancy_grid=True, slam_enabled=False):
+    def __init__(self, width, height, num_obstacles=5, num_landmarks=0, random_bots = 0,
+                 draw_kalman=False, obstacle_type='poly', draw_occupancy_grid=True, slam_enabled=False, make_dust = False):
         self.width = width
         self.height = height
         self.obstacles = []
         self.dust_particles = []
+        self.dust_collected = 0
         self.landmarks = []
         self.boundary = Boundary(self.width, self.height, 20)
         self.obstacles_boundary = [Obstacle(self.boundary.x, self.boundary.y, self.boundary.width, self.boundary.height)]
@@ -52,7 +53,9 @@ class MapEnvironment:
             self.generate_obstacles(num_obstacles)
         if obstacle_type == 'poly':
             self.generate_poly_obstacles(num_obstacles)
-        self.generate_dust(num_dust)
+        if make_dust:
+            self.dust_density = 4
+            self.generate_dust()
         self.num_landmarks = num_landmarks
         self.generate_landmarks()
         # SLAM logging setup
@@ -102,11 +105,16 @@ class MapEnvironment:
             # numerate landmarks for signatures
             self.landmarks.append(Landmark(x, y, i))
 
-    def generate_dust(self, num):
-        for _ in range(num):
-            x = random.uniform(0, self.width)
-            y = random.uniform(0, self.height)
-            self.dust_particles.append(DustParticle(x, y, width=4, height=4))
+    def generate_dust(self):
+        for x in range(self.boundary.x, self.boundary.x + self.boundary.width, self.dust_density):
+            for y in range(self.boundary.y, self.boundary.y + self.boundary.height, self.dust_density):
+                self.dust_particles.append(DustParticle(x, y))
+
+    def collect_dust(self):
+        for dust in self.dust_particles:
+            if (self.robot.pos - dust.pos).length() < self.robot.radius:
+                self.dust_collected += 1
+                self.dust_particles.remove(dust)
 
     def place_bots(self):
         for _ in range(self.num_random_bots):
@@ -192,13 +200,7 @@ class MapEnvironment:
                     self.nis_history.append(self.robot.last_nis)
             
             # Check for dust collection
-            for i in range(len(self.dust_particles)):
-                dust_particle = self.dust_particles[i]
-                if (self.robot.x - underlying_square_length/2 < dust_particle.x < self.robot.x + underlying_square_length/2
-                        and
-                        self.robot.y - underlying_square_length/2 < dust_particle.y < self.robot.y + underlying_square_length/2):
-                    self.dust_particles.pop(i)
-                    break
+            self.collect_dust()
             
             # Update sensor readings
             self.robot.update_sensors(self.poly_obstacles, self.all_robots)

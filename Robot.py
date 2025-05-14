@@ -108,7 +108,7 @@ def check_collision(self, obstacles, dust_particles):
 
     return False
 
-class Robot():
+class Robot:
     def __init__(self, x, y, theta, lm_range=200, sensor_range=200, draw_trail=False, draw_ghost=False, slam_enabled=False, control = 'MANUAL'):
         self.x = x  # position x-coordinate
         self.y = y  # position y-coordinate

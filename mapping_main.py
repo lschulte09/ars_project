@@ -10,12 +10,12 @@ def main():
     env = MapEnvironment(
         1280, 720,
         num_obstacles=8,
-        num_dust=15,
         num_landmarks=5,
         random_bots=2,
         draw_kalman=True,  # Enable Kalman filter visualization
         draw_occupancy_grid=True,  # Enable occupancy grid mapping
-        slam_enabled=True
+        slam_enabled=True,
+        make_dust=True
     )
     
     running = True
@@ -25,9 +25,9 @@ def main():
     
     # For map saving functionality
     map_saved = False
-
+    frames = 0
     while running:
-
+        frames +=1
         if pygame.time.get_ticks() % 3000 == 0:
             env.update_bot_controls()
 
@@ -61,7 +61,7 @@ def main():
             env.screen.blit(text_surface, (env.width - 150, env.height - 30))
             
             # Reset the flag after a few seconds
-            if pygame.time.get_ticks() % 3000 == 0:
+            if frames % 300 == 0:
                 map_saved = False
         
         pygame.display.flip()
