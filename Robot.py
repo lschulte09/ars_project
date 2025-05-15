@@ -260,7 +260,7 @@ class Robot:
 
                 array = np.array([v.xy for v in pos_guesses])
                 mean = np.mean(array, axis=0)
-                pos_est = Vector2(mean)
+                pos_est = Vector2(float(mean[0]), float(mean[1]))
 
             theta_guess = float(self.mu[2, 0])
             theta_guesses = np.array([])
@@ -654,8 +654,9 @@ class Robot:
                 std_devs = 2.0 * np.sqrt(eigenvalues)  # 2-sigma ellipse
                 ellipse_width = std_devs[0] * 2
                 ellipse_height = std_devs[1] * 2
-                ellipse_surf = pygame.Surface((ellipse_width, ellipse_height), pygame.SRCALPHA)
-                pygame.draw.ellipse(ellipse_surf, (0, 0, 255, 50), (0, 0, ellipse_width, ellipse_height))
+                # print(std_devs)
+                ellipse_surf = pygame.Surface((int(ellipse_width), int(ellipse_height)), pygame.SRCALPHA)
+                pygame.draw.ellipse(ellipse_surf, (0, 0, 255, 50), (0, 0, int(ellipse_width), int(ellipse_width)))
 
                 rotated_ellipse = pygame.transform.rotate(ellipse_surf, -angle_deg)  # Pygame uses clockwise rotation
                 ellipse_rect = rotated_ellipse.get_rect(center=(ghost_pos.x, ghost_pos.y))

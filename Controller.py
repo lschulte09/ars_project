@@ -4,10 +4,10 @@ import numpy as np
 
 
 class Controller:
-    def __init__(self, weights = None, num_sensors = 12, num_outputs = 2):
+    def __init__(self, weights = None, num_sensors = 12, extra_inputs = 5, num_outputs = 2):
         self.weights = weights
         self.num_sensors = num_sensors
-        self.num_inputs = self.num_sensors + 2
+        self.num_inputs = self.num_sensors + extra_inputs
         self.num_outputs = num_outputs
         self.max_speed = 30
 
@@ -18,8 +18,8 @@ class Controller:
     def generate_weights(self):
         self.weights = np.random.uniform(-1, 1, (self.num_outputs, self.num_inputs))
 
-    def out(self, input, v_left, v_right):
-        full_in = np.array(input + [v_left, v_right])
+    def out(self, input, v_left, v_right, pos_x, pos_y, angle):
+        full_in = np.array(input + [pos_x, pos_y, angle, v_left, v_right])
         outputs = np.tanh(np.dot(self.weights, full_in))*self.max_speed
         return outputs[0], outputs[1]
 

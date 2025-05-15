@@ -1,67 +1,62 @@
+import sys
+
 import pygame
 
+from Controller import Controller
 from EvolutionaryAlgorithm import EvolutionaryAlgorithm
 from MapEnvironment import MapEnvironment
 
+def main():
+
+    pygame.init()
+    clock = pygame.time.Clock()
+
+    env = MapEnvironment(1280, 720,
+                         num_obstacles=15,
+                         num_landmarks=7,
+                         random_bots=0,
+                         max_obstacle_size=100,
+                         draw_kalman=False,
+                         draw_occupancy_grid=True,
+                         slam_enabled=False,
+                         make_dust=True
+                         )
+    env.place_robot()
+    env.place_bots()
+
+    env.load_env("maps/environment_244.pkl")
+    controller = Controller()
+    controller.load("best_individual/best_individual.npy")
+
+    frames = 0
+    running = True
 
 
-pygame.init()
+    env.update_bot_controls()
+    while running:
+        frames += 1
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
 
-env = MapEnvironment(1280, 720,
-                     num_obstacles=15,
-                     num_landmarks=7,
-                     random_bots=0,
-                     max_obstacle_size=100,
-                     draw_kalman=False,
-                     draw_occupancy_grid=True,
-                     slam_enabled=False,
-                     make_dust=True
-                     )
-env.place_robot()
-env.place_bots()
+        env.update()
+        readings = env.robot.readings
+        v_l_old, v_r_old = env.robot.get_velocities()
+        mu = env.robot.mu
+        pos_x = mu[0, 0]
+        pos_y = mu[1, 0]
+        est_theta = mu[2, 0]
+        l_vel, r_vel = controller.out(readings, v_l_old, v_r_old, pos_x, pos_y, est_theta)
 
-env.load_env("maps/environment_244.pkl")
+        env.robot.set_wheel_velocities(l_vel, r_vel)
 
-frames = 0
-running = True
+        env.draw_screen()
+        pygame.display.flip()
 
-speed_avgs = []
-speed_diffs = []
-lowest_sens_reads = []
-V = 0
-delta_v = 0
-i = 0
-collision_ratio = 0
-coverage = 0
+        clock.tick(60)
 
-env.update_bot_controls()
-while running:
-    frames += 1
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            running = False
+    pygame.quit()
+    sys.exit()
 
-    env.update()
-    readings = env.robot.readings
-    v_l_old, v_r_old = env.robot.get_velocities()
-    l_vel, r_vel = controller.out(readings, v_l_old, v_r_old)
-
-    # log fitness data
-    speed_avgs.append((l_vel + r_vel) / 2)
-    speed_diffs.append(l_vel - r_vel)
-    lowest_sens_reads.append(min(readings))
-    env.robot.set_wheel_velocities(l_vel, r_vel)
-
-    if frames >= sim_length:
-        obs_collisions = env.robot.obs_collisions
-        bot_collisions = env.robot.bot_collisions
-        collision_ratio = (obs_collisions + bot_collisions) / sim_length
-        coverage = env.dust_collected / env.all_dust
-        V = sum(speed_avgs) / len(speed_avgs) / env.robot.max_speed
-        delta_v = abs(sum(speed_diffs)) / env.robot.max_speed
-        i = (sum(lowest_sens_reads) / len(lowest_sens_reads)) / env.robot.sensor_range
-        running = False
-
-pygame.quit()
-
-
+if __name__ == "__main__":
+    main()

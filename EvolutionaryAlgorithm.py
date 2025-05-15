@@ -1,6 +1,7 @@
 import math
 import random
-
+import os
+# os.environ["SDL_VIDEODRIVER"] = "dummy"
 import pygame
 import numpy as np
 from Controller import Controller
@@ -9,8 +10,10 @@ from MapEnvironment import MapEnvironment
 
 def calc_fitness(V, delta_v, i, collision_ratio, coverage):
     # Calculate fitness
+    delta_v = min(delta_v, 1.0)
     phi = V*(1-math.sqrt(delta_v))*i
-    fitness = phi * (1 - collision_ratio) * coverage
+
+    fitness = (1 - collision_ratio) * coverage
 
     return fitness
 
@@ -32,7 +35,7 @@ def crossover(parent_1, parent_2):
 
 
 class EvolutionaryAlgorithm:
-    def __init__(self, population_size = 400, num_generations = 100, k = 10, elite = 10, mutation_rate = 0.1, mutation_strength = 0.1, environment = None):
+    def __init__(self, population_size = 60, num_generations = 40, k = 10, elite = 5, mutation_rate = 0.1, mutation_strength = 0.1, environment = None):
         self.population_size = population_size
         self.num_generations = num_generations
         self.population = []
@@ -90,6 +93,8 @@ class EvolutionaryAlgorithm:
     def selection_crossover(self):
         # Select parents according to selection algorithm
         sorted_population = sorted(self.population, key=lambda ind: ind["fitness"], reverse=True)
+        for individual in sorted_population:
+            print(individual["fitness"])
         top_individuals = sorted_population[:self.elite]
 
         new_generation = top_individuals
@@ -128,17 +133,17 @@ class EvolutionaryAlgorithm:
 
         return controller
 
-    def simulate(self, controller, sim_length = 600):
+    def simulate(self, controller, sim_length = 300):
         # Run one simulation
         pygame.init()
 
         env = MapEnvironment(1280, 720,
         num_obstacles=15,
         num_landmarks=7,
-        random_bots=0,
+        random_bots=2,
         max_obstacle_size = 100,
         draw_kalman=False,
-        draw_occupancy_grid=True,
+        draw_occupancy_grid=False,
         slam_enabled=False,
         make_dust=True
         )
@@ -170,7 +175,11 @@ class EvolutionaryAlgorithm:
             env.update()
             readings = env.robot.readings
             v_l_old, v_r_old = env.robot.get_velocities()
-            l_vel, r_vel = controller.out(readings, v_l_old, v_r_old)
+            mu = env.robot.mu
+            pos_x = mu[0,0]
+            pos_y = mu[1,0]
+            est_theta = mu[2,0]
+            l_vel, r_vel = controller.out(readings, v_l_old, v_r_old, pos_x, pos_y, est_theta)
 
             # log fitness data
             speed_avgs.append((l_vel + r_vel) / 2)
@@ -183,7 +192,7 @@ class EvolutionaryAlgorithm:
                 bot_collisions = env.robot.bot_collisions
                 collision_ratio = (obs_collisions + bot_collisions)/sim_length
                 coverage = env.dust_collected/env.all_dust
-                V = sum(speed_avgs) / len(speed_avgs) / env.robot.max_speed
+                V = abs(sum(speed_avgs) / len(speed_avgs) / env.robot.max_speed)
                 delta_v = abs(sum(speed_diffs) / len(speed_diffs)) / env.robot.max_speed
                 i = (sum(lowest_sens_reads) / len(lowest_sens_reads)) / env.robot.sensor_range
                 running = False
@@ -193,6 +202,6 @@ class EvolutionaryAlgorithm:
         return V, delta_v, i, collision_ratio, coverage
 
 if __name__ == "__main__":
-    evolution = EvolutionaryAlgorithm(environment="maps/environment_244.pkl")
+    evolution = EvolutionaryAlgorithm(population_size=40, num_generations=30, elite=3, k=5, mutation_rate=0.01, mutation_strength=0.01)
     evolution.evolve()
 
