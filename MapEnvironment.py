@@ -279,7 +279,7 @@ class MapEnvironment:
         text_y += 30
         
         # Draw collision status
-        if self.robot and self.robot.collision:
+        if self.robot and (self.robot.obs_collisions or self.robot.bot_collisions):
             collision_text = "COLLISION DETECTED!"
             text_surface = self.font.render(collision_text, True, (255, 0, 0))
             self.screen.blit(text_surface, (10, text_y))
