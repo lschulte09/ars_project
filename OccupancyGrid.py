@@ -71,6 +71,9 @@ class OccupancyGrid:
             else:
                 self.log_odds[grid_x, grid_y] += self.l_free
             
+            self.log_odds[grid_x, grid_y] = np.clip(self.log_odds[grid_x, grid_y],
+                                        -10.0, 10.0)
+
             # Convert back to probability for the grid
             odds = math.exp(self.log_odds[grid_x, grid_y])
             self.grid[grid_x, grid_y] = odds / (1 + odds)

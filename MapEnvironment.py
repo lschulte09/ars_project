@@ -126,14 +126,19 @@ class MapEnvironment:
             self.poly_obstacles.append(obs)
 
     def generate_landmarks(self):
+
+        if self.num_landmarks <= 0:
+            return
+
         if self.landmark_dist == 'random':
             for i in range(self.num_landmarks):
                 x = random.uniform(0, self.width)
                 y = random.uniform(0, self.height)
                 # numerate landmarks for signatures
                 self.landmarks.append(Landmark(x, y, i))
-        if self.landmark_dist == 'even':
-            grid_size = math.ceil(math.sqrt(self.num_landmarks))
+
+        elif self.landmark_dist == 'even':
+            grid_size = max(1, math.ceil(math.sqrt(self.num_landmarks)))
             cell_width = self.width / grid_size
             cell_height = self.height / grid_size
 
@@ -309,7 +314,7 @@ class MapEnvironment:
         text_y += 30
         
         # Draw collision status
-        if self.robot and self.robot.collision:
+        if self.robot and (self.robot.obs_collisions or self.robot.bot_collisions):
             collision_text = "COLLISION DETECTED!"
             text_surface = self.font.render(collision_text, True, (255, 0, 0))
             self.screen.blit(text_surface, (10, text_y))
