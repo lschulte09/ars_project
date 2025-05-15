@@ -13,7 +13,7 @@ dependencies.
 """
 
 import os
-#os.environ.setdefault('SDL_VIDEODRIVER', 'dummy')  # headless training speed‑up
+os.environ.setdefault('SDL_VIDEODRIVER', 'dummy')  # headless training speed‑up
 
 import argparse
 import math
@@ -113,7 +113,8 @@ def make_env(width=800, height=600):
         draw_kalman=False,
         draw_occupancy_grid=True,
         obstacle_type='poly',
-        slam_enabled=True
+        slam_enabled=True,
+        make_dust=True
     )
     env.place_robot()
     # ensure auto control
@@ -145,7 +146,7 @@ def evaluate(chromosome, num_mazes=3, steps_per_episode=900):
             robot.set_wheel_velocities(v_l, v_r)
             env.update()
 
-            if getattr(robot, 'collided', False):
+            if getattr(robot, 'obs_collisions', []) or getattr(robot, 'bot_collisions', []):
                 crashed = True
                 break
 
