@@ -36,7 +36,7 @@ class EvoPolicy:
     """Feed‑forward neural net evolved via a Genetic Algorithm."""
 
     def __init__(self, chromosome, n_inputs=12, n_hidden=8,
-                 wheel_speed=30.0):
+                 wheel_speed=50.0):
         self.n_inputs = n_inputs
         self.n_hidden = n_hidden
         self.wheel_speed = wheel_speed
@@ -164,7 +164,7 @@ def evaluate(chromosome, num_mazes=3, steps_per_episode=900):
 # Main GA loop
 # ----------------------------------------------------------------------
 
-def run_ga(pop_size=40, generations=30,
+def run_ga(pop_size=40, generations=10,
            save_path='best.npy', rng_seed=None):
     if rng_seed is not None:
         random.seed(rng_seed)

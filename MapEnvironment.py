@@ -47,7 +47,7 @@ def generate_polygon(center, radius, num_vertices):
 
 class MapEnvironment:
     def __init__(self, width, height, num_obstacles=5, max_obstacle_size=100, num_landmarks=0, random_bots = 0,
-                 draw_kalman=False, obstacle_type='poly', draw_occupancy_grid=True, slam_enabled=False, make_dust = False,
+                 draw_kalman=False, obstacle_type='poly', draw_occupancy_grid=True, slam_enabled=False, make_dust = True,
                  landmark_dist = 'even', filepath = None, render = True):
         self.width = width
         self.height = height

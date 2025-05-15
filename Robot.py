@@ -456,15 +456,20 @@ class Robot:
             self.ghost_trail.append(gp)
         if len(self.ghost_trail) > 1000:
             self.ghost_trail.pop(0)
-            
-        # Calculate velocities from wheel velocities
+
+        # 1) get commanded velocities (from controller or nav)
         linear_velocity, angular_velocity = self.calculate_velocities()
 
+        # 2) true‐motion update
+        self.theta = (self.theta - angular_velocity * dt) % (2 * math.pi)
+        self.x += linear_velocity * math.cos(self.theta) * dt
+        self.y += linear_velocity * math.sin(self.theta) * dt
 
-        # Update position and orientation
-        self.theta -= angular_velocity * dt
-        self.x += linear_velocity * np.cos(self.theta) * dt
-        self.y += linear_velocity * np.sin(self.theta) * dt
+        # 3) Kalman‐localisation update
+        #    assumes you already have a `simple_localisation(v, w, dt)`
+        #    that updates self.loc_mu; we mirror it into self.mu:
+        self.simple_localisation(linear_velocity, angular_velocity, dt)
+        self.mu = self.loc_mu.copy()
 
         dir_vec = Vector2(1, 0).rotate_rad(self.theta)
         self.move_vec = dir_vec * linear_velocity * dt
