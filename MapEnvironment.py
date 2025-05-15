@@ -5,7 +5,6 @@ import random
 import numpy as np
 import matplotlib.pyplot as plt
 import pygame
-import json
 from pygame.math import Vector2
 from Boundary import Boundary
 from DustParticle import DustParticle
@@ -15,6 +14,26 @@ from PolyObstacle import PolyObstacle
 from Robot import Robot
 from OccupancyGrid import OccupancyGrid
 
+
+def point_in_polygon(point, polygon):
+    """
+    Determines if a point is inside a polygon, using the ray casting algorithm.
+    """
+    x, y = point
+    inside = False
+    n = len(polygon)
+
+    for i in range(n):
+        j = (i - 1) % n
+        xi, yi = polygon[i]
+        xj, yj = polygon[j]
+
+        intersect = ((yi > y) != (yj > y)) and \
+                    (x < (xj - xi) * (y - yi) / (yj - yi + 1e-10) + xi)
+        if intersect:
+            inside = not inside
+
+    return inside
 
 def generate_polygon(center, radius, num_vertices):
     angles = sorted([random.uniform(0, 2 * math.pi) for _ in range(num_vertices)])
@@ -29,7 +48,7 @@ def generate_polygon(center, radius, num_vertices):
 class MapEnvironment:
     def __init__(self, width, height, num_obstacles=5, max_obstacle_size=100, num_landmarks=0, random_bots = 0,
                  draw_kalman=False, obstacle_type='poly', draw_occupancy_grid=True, slam_enabled=False, make_dust = False,
-                 landmark_dist = 'even'):
+                 landmark_dist = 'even', filepath = None, render = True):
         self.width = width
         self.height = height
         self.obstacles = []
@@ -59,6 +78,7 @@ class MapEnvironment:
         if obstacle_type == 'poly':
             self.generate_poly_obstacles(num_obstacles)
         if make_dust:
+            self.all_dust = 0
             self.dust_density = 4
             self.generate_dust()
         self.num_landmarks = num_landmarks
@@ -80,6 +100,8 @@ class MapEnvironment:
         
         # UI options
         self.show_map = True  # Toggle for showing/hiding the occupancy grid
+
+        self.render = render
 
     def generate_obstacles(self, num):
         for _ in range(num):
@@ -131,6 +153,7 @@ class MapEnvironment:
         for x in range(int(self.boundary.x), int(self.boundary.x + self.boundary.width), int(self.dust_density)):
             for y in range(int(self.boundary.y), int(self.boundary.y + self.boundary.height), int(self.dust_density)):
                 self.dust_particles.append(DustParticle(x, y))
+                self.all_dust += 1
 
     def collect_dust(self):
         for dust in self.dust_particles:
@@ -146,12 +169,22 @@ class MapEnvironment:
             self.random_bots.append(Robot(rand_x_robot, rand_y_robot, rand_theta, draw_trail=False, draw_ghost=False, slam_enabled=False, control='RANDOM'))
             self.all_robots.append(self.random_bots[-1])
 
+    def point_in_any_obstacle(self, point):
+        for obs in self.poly_obstacles[1:]:
+            if point_in_polygon(point, obs.get_points()):
+                return True
+        return False
+
+    def get_point_outside_any_obstacle(self):
+        while True:
+            rand_pos = Vector2(random.uniform(50, self.width - 50), random.uniform(50, self.height - 50))
+            if not self.point_in_any_obstacle(rand_pos):
+                return rand_pos
 
     def place_robot(self):
-        rand_x_robot = random.uniform(50, self.width-50)
-        rand_y_robot = random.uniform(50, self.height-50)
+        rand_pos = self.get_point_outside_any_obstacle()
         rand_theta = random.uniform(0, 2 * math.pi)
-        self.robot = Robot(rand_x_robot, rand_y_robot, rand_theta, draw_trail=self.draw_kalman, draw_ghost=self.draw_kalman, slam_enabled=self.slam_enabled, control='MANUAL')
+        self.robot = Robot(rand_pos.x, rand_pos.y, rand_theta, draw_trail=self.draw_kalman, draw_ghost=self.draw_kalman, slam_enabled=self.slam_enabled, control='MANUAL')
         self.all_robots.append(self.robot)
         # Initial sensor update
         self.robot.update_sensors(self.poly_obstacles, self.all_robots)
@@ -236,6 +269,8 @@ class MapEnvironment:
                 bot.move(dt=0.1, obstacles=self.poly_obstacles, landmarks=self.landmarks, robots=self.all_robots)
 
     def update_bot_controls(self):
+        if not self.random_bots:
+            return
         for bot in self.random_bots:
             bot.random_move()
 
@@ -325,8 +360,10 @@ class MapEnvironment:
             'dust_particles': self.dust_particles
         }
 
-        with open(os.path.join(directory, f'environment_{random.randint(0, 1000)}.pkl'), 'wb') as f:
+        filename = f'environment_{random.randint(0, 1000)}.pkl'
+        with open(os.path.join(directory, filename), 'wb') as f:
             pickle.dump(data, f)
+        print(f"Environment saved to {os.path.join(directory, filename)}")
 
     def load_env(self, filename):
         """Load the environment from a file"""

@@ -18,11 +18,13 @@ def main():
         slam_enabled=True,
         make_dust=True
     )
-    
     running = True
     env.place_robot()
     env.place_bots()
     env.update_bot_controls()
+
+    # env.load_env("maps/environment_244.pkl")
+
     
     # For map saving functionality
     map_saved = False
@@ -53,6 +55,12 @@ def main():
                 if event.key == pygame.K_b:
                     print("Saving environment...")
                     env.save_env("maps")
+
+                # Load environment with L key
+                if event.key == pygame.K_l:
+                    print("Loading environment...")
+                    env.load_env("maps/environment_244.pkl")
+
         
         # Update the environment
         env.update()

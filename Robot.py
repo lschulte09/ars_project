@@ -150,6 +150,7 @@ class Robot:
 
         # Create 12 sensors placed every 30 degrees (360°/12)
         self.sensors = [Sensor(np.deg2rad(angle), sensor_range) for angle in range(0, 360, 30)]
+        self.readings = [0] * len(self.sensors)
 
         # Collision flag
         self.collision = False
@@ -305,8 +306,9 @@ class Robot:
         """
         Update all sensor readings for obstacles.
         """
-        for sensor in self.sensors:
-            sensor.read_distance(self, obstacles, robots, type = 'poly')
+        for idx, sensor in enumerate(self.sensors):
+            self.readings[idx] = sensor.read_distance(self, obstacles, robots, type = 'poly')
+
     
     def set_wheel_velocities(self, v_left, v_right):
         """
@@ -314,6 +316,9 @@ class Robot:
         """
         self.v_left = v_left
         self.v_right = v_right
+
+    def get_velocities(self):
+        return self.v_left, self.v_right
 
     def random_move(self):
         """
